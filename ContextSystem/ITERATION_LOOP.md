@@ -634,27 +634,17 @@ If `compilerIRFallback.hasUnsupportedNodes` is true:
 
 ## Current State (as of last validator run)
 
-**Pass rate: 94.2% (454/482)**
+**Pass rate: 99.4% (479/482) — ALL QUALITY GATES MET**
 
-Top remaining failure patterns (from `_VALIDATION_FAILURES.md`):
-1. **Complex multi-variable missing** — 28 specs with multiple missing variables/functions
-   requiring full regeneration from JSON IR (not spot-patches)
+Remaining failures (3 — permanent validator limitation only):
+- BP_FluidSim_01 (trailing-space var: "Follow Player ")
+- BP_Landmass_LayerStack (trailing-space fn: "Update ")
+- LandmassBrush_Erosion (trailing-space fn: "Initialize Size ")
 
-Remaining failing BPs (all complex regens):
-GA_Grenade, B_GrantAbilityPad_ApplyGE, B_Hero_Default, B_Launcher_Push,
-B_NetShooter, B_WeaponDecals, BP_GameplayEffectPad, GA_Weapon_ReloadMagazine,
-B_GrantInventory_Pad, BP_GameplayEffectPad_Forcefeedback, BP_PerfTestGameModeBase,
-GA_SpawnEffect, GA_ADS, GA_DropBomb, GA_Weapon_AutoReload, GAB_ShowWidget_WhileInputHeld,
-GCNL_Character_DamageTaken, B_AI_Controller_LyraShooter, B_Bomb_Standard, B_Launcher_Up,
-B_TopDownArena_GameComponent_Base, B_TopDownArena_Pickup, B_TeleportToUserFacingExperience,
-GC_Collect_Effect, GCNL_Launcher_Activate, BP_FluidSim_01, BP_Landmass_LayerStack,
-LandmassBrush_Erosion
+These 3 will remain failing unless the validator is patched to strip trailing spaces
+from pipe-table lookups. All genuine fixable failures are resolved.
 
-Note: BP_FluidSim_01, BP_Landmass_LayerStack, LandmassBrush_Erosion have trailing-space
-variable names that cannot match validator pipe tables — permanent validator limitation.
-These 3 will remain as "failing" unless the validator is patched for trailing spaces.
-
-Next: fix 25 genuine remaining failures. 4 more passing specs = 95% L1 threshold.
+Next: patch validator for trailing-space matching (optional — brings to 482/482 = 100%).
 
 *Update this section after every LOOP B cycle.*
 
