@@ -149,6 +149,21 @@ def parse_spec(spec_text: str) -> dict:
 # L1: Structural Completeness
 # ---------------------------------------------------------------------------
 
+def _norm(name: str) -> str:
+    """Normalize an IR name for comparison against spec names.
+
+    UE Blueprint display names sometimes carry trailing spaces (e.g. "Follow Player ",
+    "Update ", "Initialize Size ").  These are UE editor metadata artifacts — not
+    intentional parts of the identifier — and are faithfully preserved in the JSON IR
+    for reconstruction completeness.  The spec markdown parser strips them via .strip(),
+    so we must strip the IR side too before comparison, otherwise the lookup always fails.
+
+    We use rstrip() (not strip()) to preserve any intentional leading whitespace, though
+    none is known to exist in the Lyra corpus.
+    """
+    return name.rstrip()
+
+
 def validate_structural(spec: dict, ir: dict) -> list[dict]:
     """Check every IR field has a spec counterpart."""
     issues = []
@@ -170,15 +185,27 @@ def validate_structural(spec: dict, ir: dict) -> list[dict]:
     ir_interfaces = ir.get("implementedInterfaces") or []
     cdo_delta = ir.get("classDefaultValueDelta") or {}
 
+    # Build a deduplicated normalized set for efficient lookup, but iterate originals
+    # so error messages show the real IR name (including trailing spaces when present).
+    _seen_vars: set[str] = set()
     for v in ir_vars:
-        if v not in spec["variable_names"] and v != "UberGraphFrame":
+        v_norm = _norm(v)
+        if v_norm in _seen_vars:
+            continue  # skip duplicate after normalization (e.g. "Update" and "Update ")
+        _seen_vars.add(v_norm)
+        if v_norm not in spec["variable_names"] and v_norm != "UberGraphFrame":
             issues.append({
                 "layer": "L1", "severity": "error", "field": "variable",
                 "name": v, "message": f"Variable '{v}' in IR but missing from spec"
             })
 
+    _seen_funcs: set[str] = set()
     for f in ir_funcs:
-        if f not in spec["function_names"]:
+        f_norm = _norm(f)
+        if f_norm in _seen_funcs:
+            continue  # skip duplicate after normalization
+        _seen_funcs.add(f_norm)
+        if f_norm not in spec["function_names"]:
             issues.append({
                 "layer": "L1", "severity": "error", "field": "function",
                 "name": f, "message": f"Function '{f}' in IR but missing from spec"
@@ -201,7 +228,8 @@ def validate_structural(spec: dict, ir: dict) -> list[dict]:
             })
 
     for prop in cdo_delta:
-        if prop not in spec["cdo_properties"]:
+        prop_norm = _norm(prop)
+        if prop_norm not in spec["cdo_properties"]:
             issues.append({
                 "layer": "L1", "severity": "warning", "field": "cdo_property",
                 "name": prop,
@@ -255,8 +283,13 @@ def validate_accuracy(spec: dict, ir: dict) -> list[dict]:
     """Check types, defaults, flags match."""
     issues = []
 
-    ir_vars = {v["name"]: v for v in (ir.get("detailedVariables") or [])}
-    ir_funcs = {f["name"]: f for f in (ir.get("detailedFunctions") or [])}
+    # Build normalized lookup dicts so L2 checks work even when spec strips trailing spaces.
+    ir_vars = {}
+    for v in (ir.get("detailedVariables") or []):
+        ir_vars[_norm(v["name"])] = v
+    ir_funcs = {}
+    for f in (ir.get("detailedFunctions") or []):
+        ir_funcs[_norm(f["name"])] = f
 
     for vname in spec["variable_names"]:
         if vname in ir_vars:

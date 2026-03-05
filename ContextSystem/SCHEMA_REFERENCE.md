@@ -59,9 +59,16 @@ One file per Blueprint asset in the project.
 
 Each entry represents a Blueprint variable (UPROPERTY equivalent).
 
+> **⚠ Trailing-Space Name Artifact:** UE Blueprint metadata occasionally stores variable
+> `DisplayName` values with a trailing space (e.g. `"Follow Player "`). These are UE editor
+> artifacts preserved faithfully in the IR for reconstruction completeness. The validator
+> normalizes names with `rstrip()` before comparison. When writing specs, omit the trailing
+> space in table entries and document the artifact in `## IR Notes`. Detect with:
+> `name.rstrip() != name`.
+
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | string | Variable name |
+| `name` | string | Variable name (may have trailing-space artifact — see note above) |
 | `type` | string | Human-readable type string (e.g. "object (/Script/Engine.Pawn)") |
 | `typeCategory` | string | Base type: bool, int, float, object, struct, enum, class, string, text, name, etc. |
 | `typeSubCategory` | string | Sub-type info (usually "None") |
@@ -95,9 +102,15 @@ Each entry represents a Blueprint variable (UPROPERTY equivalent).
 
 Each entry represents a Blueprint function (UFUNCTION equivalent).
 
+> **⚠ Trailing-Space Name Artifact:** Same as variables above — function `DisplayName`
+> values may have trailing spaces (e.g. `"Update "`, `"Initialize Size "`). Occasionally
+> two entries appear whose names differ only by a trailing space (e.g. `"Update"` and
+> `"Update "`) — these are the same function with a metadata duplicate. Both appear in
+> `detailedFunctions[]`; the validator deduplicates them after `rstrip()` normalization.
+
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | string | Function name |
+| `name` | string | Function name (may have trailing-space artifact — see note above) |
 | `functionPath` | string | Full path including class (e.g. "B_Weapon_C::Fire") |
 | `accessSpecifier` | string | "public", "protected", "private" |
 | `isPure` | bool | Pure function (no side effects, no exec pin) |

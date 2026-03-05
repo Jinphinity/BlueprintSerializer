@@ -77,6 +77,31 @@ Every function in `detailedFunctions[]` must appear in the spec, EXCEPT:
 Named user functions, overrides, RPCs, BT event overrides (`ReceiveActivateAI`,
 `ReceiveExecuteAI`, etc.) — ALL must be listed.
 
+### RULE 9 — Trailing-Space Name Artifacts
+UE Blueprint metadata sometimes stores variable or function `DisplayName` values with
+a **trailing space** (e.g. `"Follow Player "`, `"Update "`, `"Initialize Size "`).
+These are UE editor artifacts — not intentional parts of the identifier.
+
+**How the validator handles them:** `validate_specs.py` strips trailing whitespace
+from IR names before comparing against spec names. So a spec entry `Follow Player`
+(no trailing space) correctly satisfies an IR variable named `"Follow Player "`.
+
+**What you MUST do in the spec:**
+1. List the name WITHOUT the trailing space in the table (e.g. `| Follow Player | ...`).
+   The validator will match it correctly.
+2. Add a note in `## IR Notes` documenting the artifact:
+   ```
+   **Trailing-space name artifact:** Variable `Follow Player` has a trailing space
+   in the UE source metadata (`"Follow Player "` in JSON IR). This is a UE editor
+   artifact; reconstruct using the stripped form.
+   ```
+3. If two IR entries differ only by a trailing space (e.g. `"Update"` and `"Update "`),
+   they are the same function with a metadata duplicate. List both in the Functions table
+   (the validator deduplicates after normalization), and note the duplication in IR Notes.
+
+**Detection:** When iterating `detailedVariables[]` or `detailedFunctions[]`, check
+`name.rstrip() != name` to identify trailing-space names.
+
 ---
 
 ## Before You Start
