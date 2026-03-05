@@ -584,7 +584,8 @@ python Plugins/BlueprintSerializer/Scripts/validate_specs.py \
   --fix-list docs_Lyra/BlueprintSpecs/_VALIDATION_FAILURES.md
 
 ## Known blockers
-- BP_FluidSim_01, BP_Landmass_LayerStack, LandmassBrush_Erosion: trailing-space validator gap
+None — all 482 specs pass 100%. Previous trailing-space blocker was fixed in
+validate_specs.py (commit 1226e65) via _norm()=rstrip() normalization.
 ```
 
 ### On resume (after compaction or agent swap)
@@ -634,17 +635,20 @@ If `compilerIRFallback.hasUnsupportedNodes` is true:
 
 ## Current State (as of last validator run)
 
-**Pass rate: 99.4% (479/482) — ALL QUALITY GATES MET**
+**Pass rate: 100% (482/482) — PERFECT. ZERO ERRORS.**
 
-Remaining failures (3 — permanent validator limitation only):
-- BP_FluidSim_01 (trailing-space var: "Follow Player ")
-- BP_Landmass_LayerStack (trailing-space fn: "Update ")
-- LandmassBrush_Erosion (trailing-space fn: "Initialize Size ")
+All 482 matched specs pass. No remaining failures.
 
-These 3 will remain failing unless the validator is patched to strip trailing spaces
-from pipe-table lookups. All genuine fixable failures are resolved.
+Root cause of the former "permanent" 3 failures was diagnosed and fixed:
+UE DisplayName metadata trailing-space artifacts (e.g. "Follow Player ") were
+preserved faithfully in the IR but the validator stripped spec names via .strip()
+without stripping IR names — asymmetric comparison. Fixed by `_norm()=rstrip()`
+in `validate_specs.py`. ANALYSIS_PLAYBOOK.md RULE 9 + SCHEMA_REFERENCE.md updated.
+3 spec IR Notes updated to document the artifact for reconstruction completeness.
+14/14 regression gates pass on fresh re-export.
 
-Next: patch validator for trailing-space matching (optional — brings to 482/482 = 100%).
+Next: no spec quality work needed. Focus on next pipeline stage (LOOP C
+meta-improvements or SYNTHESIZE phase).
 
 *Update this section after every LOOP B cycle.*
 
