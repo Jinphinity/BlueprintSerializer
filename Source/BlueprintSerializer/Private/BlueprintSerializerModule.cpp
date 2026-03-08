@@ -123,33 +123,7 @@ void FBlueprintSerializerModule::RegisterConsoleCommands()
 		TEXT("Count all Blueprints in the current project"),
 		FConsoleCommandDelegate::CreateLambda([]()
 		{
-			FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
-			IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
-			
-			TArray<FAssetData> BlueprintAssets;
-			AssetRegistry.GetAssetsByClass(UBlueprint::StaticClass()->GetClassPathName(), BlueprintAssets);
-
-			TArray<FAssetData> AnimBlueprintAssets;
-			AssetRegistry.GetAssetsByClass(UAnimBlueprint::StaticClass()->GetClassPathName(), AnimBlueprintAssets);
-
-			TSet<FName> SeenPackages;
-			int32 TotalCount = 0;
-			for (const FAssetData& Asset : BlueprintAssets)
-			{
-				if (!SeenPackages.Contains(Asset.PackageName))
-				{
-					SeenPackages.Add(Asset.PackageName);
-					++TotalCount;
-				}
-			}
-			for (const FAssetData& Asset : AnimBlueprintAssets)
-			{
-				if (!SeenPackages.Contains(Asset.PackageName))
-				{
-					SeenPackages.Add(Asset.PackageName);
-					++TotalCount;
-				}
-			}
+			const int32 TotalCount = UBlueprintAnalyzer::CollectAllProjectBlueprintAssetData().Num();
 			
 			UE_LOG(LogBlueprintSerializer, Display, TEXT("Found %d Blueprints in project"), TotalCount);
 			
@@ -333,8 +307,7 @@ void FBlueprintSerializerModule::RegisterMenuExtensions()
 
 							for (const FAssetData& AssetData : SelectedAssets)
 							{
-								if (AssetData.AssetClassPath == UBlueprint::StaticClass()->GetClassPathName() ||
-									AssetData.AssetClassPath == UAnimBlueprint::StaticClass()->GetClassPathName())
+								if (Cast<UBlueprint>(AssetData.GetAsset()))
 								{
 									const FString BlueprintPath = AssetData.GetObjectPathString();
 									const bool bSuccess = UBlueprintAnalyzer::ExportSingleBlueprintToJSON(BlueprintPath);

@@ -152,6 +152,7 @@
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
+#include "AssetRegistry/ARFilter.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UObject/PropertyPortFlags.h"
 #include "UObject/SoftObjectPtr.h"
@@ -2072,46 +2073,8 @@ FBS_BlueprintData UBlueprintAnalyzer::AnalyzeBlueprint(UBlueprint* Blueprint)
 TArray<FBS_BlueprintData> UBlueprintAnalyzer::AnalyzeAllProjectBlueprints()
 {
 	TArray<FBS_BlueprintData> AllBlueprintData;
-	
-	// Get Asset Registry
-	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
-	IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
-	
-	// Find all Blueprint assets (UE5.5 API)
-	TArray<FAssetData> BlueprintAssets;
-	FTopLevelAssetPath BlueprintPath(UBlueprint::StaticClass());
-	AssetRegistry.GetAssetsByClass(BlueprintPath, BlueprintAssets);
-
-	TArray<FAssetData> AnimBlueprintAssets;
-	FTopLevelAssetPath AnimBlueprintPath(UAnimBlueprint::StaticClass());
-	AssetRegistry.GetAssetsByClass(AnimBlueprintPath, AnimBlueprintAssets);
-
-	TSet<FName> SeenPackages;
-	TArray<FAssetData> AllAssets;
-	AllAssets.Reserve(BlueprintAssets.Num() + AnimBlueprintAssets.Num());
-	for (const FAssetData& AssetData : BlueprintAssets)
-	{
-		if (!SeenPackages.Contains(AssetData.PackageName))
-		{
-		    SeenPackages.Add(AssetData.PackageName);
-			AllAssets.Add(AssetData);
-		}
-	}
-	for (const FAssetData& AssetData : AnimBlueprintAssets)
-	{
-		if (!SeenPackages.Contains(AssetData.PackageName))
-		{
-		    SeenPackages.Add(AssetData.PackageName);
-			AllAssets.Add(AssetData);
-		}
-	}
-
-	AllAssets.Sort([](const FAssetData& A, const FAssetData& B)
-	{
-		return A.GetObjectPathString() < B.GetObjectPathString();
-	});
-	
-	UE_LOG(LogTemp, Warning, TEXT("Found %d Blueprint assets (%d AnimBlueprints) to analyze"), AllAssets.Num(), AnimBlueprintAssets.Num());
+	const TArray<FAssetData> AllAssets = CollectAllProjectBlueprintAssetData();
+	UE_LOG(LogTemp, Warning, TEXT("Found %d Blueprint-derived assets to analyze"), AllAssets.Num());
 	
 	// Analyze each Blueprint
 	for (const FAssetData& AssetData : AllAssets)
@@ -2135,6 +2098,40 @@ TArray<FBS_BlueprintData> UBlueprintAnalyzer::AnalyzeAllProjectBlueprints()
 	});
 	
 	return AllBlueprintData;
+}
+
+TArray<FAssetData> UBlueprintAnalyzer::CollectAllProjectBlueprintAssetData()
+{
+	TArray<FAssetData> BlueprintAssets;
+
+	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+	IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+
+	FARFilter BlueprintFilter;
+	BlueprintFilter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+	BlueprintFilter.bRecursiveClasses = true;
+	AssetRegistry.GetAssets(BlueprintFilter, BlueprintAssets);
+
+	TSet<FName> SeenPackages;
+	TArray<FAssetData> AllAssets;
+	AllAssets.Reserve(BlueprintAssets.Num());
+	for (const FAssetData& AssetData : BlueprintAssets)
+	{
+		if (SeenPackages.Contains(AssetData.PackageName))
+		{
+			continue;
+		}
+
+		SeenPackages.Add(AssetData.PackageName);
+		AllAssets.Add(AssetData);
+	}
+
+	AllAssets.Sort([](const FAssetData& A, const FAssetData& B)
+	{
+		return A.GetObjectPathString() < B.GetObjectPathString();
+	});
+
+	return AllAssets;
 }
 
 TArray<FString> UBlueprintAnalyzer::ExtractVariables(UBlueprint* Blueprint)
@@ -8518,6 +8515,9 @@ TArray<FBS_FunctionInfo> UBlueprintAnalyzer::ExtractDetailedFunctions(UBlueprint
 		FBS_FunctionInfo FuncInfo;
 		FuncInfo.FunctionName = Graph->GetFName().ToString();
 		FuncInfo.FunctionPath = Graph->GetPathName();
+		const bool bIsControlRigBackedBlueprint =
+			Blueprint->ParentClass &&
+			Blueprint->ParentClass->GetPathName().StartsWith(TEXT("/Script/ControlRig.ControlRig"));
 
 		UK2Node_FunctionEntry* EntryNode = nullptr;
 		for (UEdGraphNode* Node : Graph->Nodes)
@@ -8806,6 +8806,14 @@ TArray<FBS_FunctionInfo> UBlueprintAnalyzer::ExtractDetailedFunctions(UBlueprint
 		if (FuncInfo.ReturnType.IsEmpty())
 		{
 			FuncInfo.ReturnType = TEXT("void");
+		}
+
+		if (FunctionSpecifiers.Num() == 0 && bIsControlRigBackedBlueprint)
+		{
+			FuncInfo.bIsPublic = true;
+			FuncInfo.AccessSpecifier = TEXT("public");
+			FunctionSpecifiers.Add(TEXT("ControlRigGraph"));
+			FunctionSpecifiers.Add(TEXT("Public"));
 		}
 
 		FuncInfo.DeclarationSpecifiers = FunctionSpecifiers.Array();

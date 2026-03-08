@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "AssetRegistry/AssetData.h"
 #include "Engine/Blueprint.h"
 // Forward declarations - BlueprintGraph includes moved to implementation files
 class UK2Node;
@@ -1149,6 +1150,13 @@ public:
 	 * Analyze all Blueprints in the project
 	 */
 	static TArray<FBS_BlueprintData> AnalyzeAllProjectBlueprints();
+
+	/**
+	 * Collect all Blueprint-derived assets discoverable in the project registry.
+	 * This includes WidgetBlueprint, EditorUtilityWidgetBlueprint, AnimBlueprint,
+	 * and any other UBlueprint subclasses.
+	 */
+	static TArray<FAssetData> CollectAllProjectBlueprintAssetData();
 	
 	/**
 	 * Export Blueprint analysis to JSON format

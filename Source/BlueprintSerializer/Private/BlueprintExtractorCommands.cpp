@@ -166,36 +166,7 @@ void FBlueprintExtractorCommands::ExportAllBlueprints(const TArray<FString>& Arg
 
     try
     {
-        FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
-        IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
-
-        TArray<FAssetData> BlueprintAssets;
-        FTopLevelAssetPath BlueprintPath(UBlueprint::StaticClass());
-        AssetRegistry.GetAssetsByClass(BlueprintPath, BlueprintAssets);
-
-        TArray<FAssetData> AnimBlueprintAssets;
-        FTopLevelAssetPath AnimBlueprintPath(UAnimBlueprint::StaticClass());
-        AssetRegistry.GetAssetsByClass(AnimBlueprintPath, AnimBlueprintAssets);
-
-        TSet<FName> SeenPackages;
-        TArray<FAssetData> AllAssets;
-        AllAssets.Reserve(BlueprintAssets.Num() + AnimBlueprintAssets.Num());
-        for (const FAssetData& AssetData : BlueprintAssets)
-        {
-            if (!SeenPackages.Contains(AssetData.PackageName))
-            {
-                SeenPackages.Add(AssetData.PackageName);
-                AllAssets.Add(AssetData);
-            }
-        }
-        for (const FAssetData& AssetData : AnimBlueprintAssets)
-        {
-            if (!SeenPackages.Contains(AssetData.PackageName))
-            {
-                SeenPackages.Add(AssetData.PackageName);
-                AllAssets.Add(AssetData);
-            }
-        }
+        const TArray<FAssetData> AllAssets = UBlueprintAnalyzer::CollectAllProjectBlueprintAssetData();
 
         UE_LOG(LogTemp, Log, TEXT("Exporting %d Blueprints to: %s"), AllAssets.Num(), *ExportDir);
 
@@ -259,34 +230,7 @@ void FBlueprintExtractorCommands::ExportCompleteProjectData(const TArray<FString
 void FBlueprintExtractorCommands::CountProjectBlueprints(const TArray<FString>& Args)
 {
 #if WITH_EDITOR
-    const FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
-    const IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
-    
-    TArray<FAssetData> BlueprintAssets;
-    AssetRegistry.GetAssetsByClass(UBlueprint::StaticClass()->GetClassPathName(), BlueprintAssets);
-
-    TArray<FAssetData> AnimBlueprintAssets;
-    AssetRegistry.GetAssetsByClass(UAnimBlueprint::StaticClass()->GetClassPathName(), AnimBlueprintAssets);
-
-    TSet<FName> SeenPackages;
-    TArray<FAssetData> AllAssets;
-    AllAssets.Reserve(BlueprintAssets.Num() + AnimBlueprintAssets.Num());
-    for (const FAssetData& Asset : BlueprintAssets)
-    {
-        if (!SeenPackages.Contains(Asset.PackageName))
-        {
-            SeenPackages.Add(Asset.PackageName);
-            AllAssets.Add(Asset);
-        }
-    }
-    for (const FAssetData& Asset : AnimBlueprintAssets)
-    {
-        if (!SeenPackages.Contains(Asset.PackageName))
-        {
-            SeenPackages.Add(Asset.PackageName);
-            AllAssets.Add(Asset);
-        }
-    }
+    const TArray<FAssetData> AllAssets = UBlueprintAnalyzer::CollectAllProjectBlueprintAssetData();
     
     UE_LOG(LogTemp, Log, TEXT("📊 Found %d Blueprints in project"), AllAssets.Num());
     

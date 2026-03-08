@@ -155,34 +155,7 @@ bool UBlueprintSerializerBlueprintLibrary::ExportAllProjectBlueprintData()
 int32 UBlueprintSerializerBlueprintLibrary::GetProjectBlueprintCount()
 {
 #if WITH_EDITOR
-	const FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
-	const IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
-	
-	TArray<FAssetData> BlueprintAssets;
-	AssetRegistry.GetAssetsByClass(UBlueprint::StaticClass()->GetClassPathName(), BlueprintAssets);
-	TArray<FAssetData> AnimBlueprintAssets;
-	AssetRegistry.GetAssetsByClass(UAnimBlueprint::StaticClass()->GetClassPathName(), AnimBlueprintAssets);
-
-	TSet<FName> SeenPackages;
-	int32 TotalCount = 0;
-	for (const FAssetData& AssetData : BlueprintAssets)
-	{
-		if (!SeenPackages.Contains(AssetData.PackageName))
-		{
-		    SeenPackages.Add(AssetData.PackageName);
-			++TotalCount;
-		}
-	}
-	for (const FAssetData& AssetData : AnimBlueprintAssets)
-	{
-		if (!SeenPackages.Contains(AssetData.PackageName))
-		{
-		    SeenPackages.Add(AssetData.PackageName);
-			++TotalCount;
-		}
-	}
-
-	return TotalCount;
+	return UBlueprintAnalyzer::CollectAllProjectBlueprintAssetData().Num();
 #else
 	return 0;
 #endif
@@ -578,13 +551,7 @@ namespace
 		FString AssetName = ClassName;
 		AssetName.RemoveFromEnd(TEXT("_C"));
 
-		FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
-		const IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
-
-		TArray<FAssetData> BlueprintAssets;
-		AssetRegistry.GetAssetsByClass(UBlueprint::StaticClass()->GetClassPathName(), BlueprintAssets);
-
-		for (const FAssetData& AssetData : BlueprintAssets)
+		for (const FAssetData& AssetData : UBlueprintAnalyzer::CollectAllProjectBlueprintAssetData())
 		{
 			if (AssetData.AssetName.ToString() != AssetName)
 			{
