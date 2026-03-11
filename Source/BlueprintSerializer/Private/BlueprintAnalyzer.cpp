@@ -56,13 +56,27 @@
 #define UEARATAME_HAS_ANIM_STATE_ALIAS 0
 #endif
 
+#if __has_include("ControlRig.h") && __has_include("Rigs/RigHierarchy.h")
+#include "ControlRig.h"
+#include "Rigs/RigHierarchy.h"
+#include "Engine/SkeletalMesh.h"
+#define UEARATAME_HAS_CONTROL_RIG_RUNTIME 1
+#else
+#define UEARATAME_HAS_CONTROL_RIG_RUNTIME 0
+#endif
+
 #if __has_include("ControlRigBlueprint.h")
 #include "ControlRigBlueprint.h"
 #include "RigVMModel/RigVMGraph.h"
 #include "RigVMModel/RigVMNode.h"
 #include "RigVMModel/RigVMPin.h"
 #include "RigVMModel/RigVMLink.h"
-#include "Engine/SkeletalMesh.h"
+#define UEARATAME_HAS_CONTROL_RIG_BLUEPRINT 1
+#else
+#define UEARATAME_HAS_CONTROL_RIG_BLUEPRINT 0
+#endif
+
+#if UEARATAME_HAS_CONTROL_RIG_RUNTIME || UEARATAME_HAS_CONTROL_RIG_BLUEPRINT
 #define UEARATAME_HAS_CONTROL_RIG 1
 #else
 #define UEARATAME_HAS_CONTROL_RIG 0
@@ -144,10 +158,6 @@
 #include "K2Node_TemporaryVariable.h"
 #include "K2Node_GetDataTableRow.h"
 #include "K2Node_GetEnumeratorName.h"
-#include "K2Node_LatentAbilityCall.h"
-#include "K2Node_LatentGameplayTaskCall.h"
-#include "K2Node_EnhancedInputAction.h"
-#include "InputAction.h"       // UInputAction full definition (EnhancedInput module)
 #include "EdGraphSchema_K2.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
@@ -853,6 +863,7 @@ namespace
         return Path;
     }
 
+#if UEARATAME_HAS_CONTROL_RIG_BLUEPRINT
     FGuid MakeStableRigVMNodeGuid(const URigVMNode* VMNode)
     {
         if (!VMNode)
@@ -871,6 +882,368 @@ namespace
             GetTypeHash(GraphName),
             GetTypeHash(NodeClass));
     }
+#endif
+
+    bool IsControlRigClassPath(const FString& ClassPath)
+    {
+        return ClassPath.StartsWith(TEXT("/Script/ControlRig.ControlRig"), ESearchCase::CaseSensitive)
+            || ClassPath.StartsWith(TEXT("/Script/ControlRigDeveloper.ControlRigBlueprint"), ESearchCase::CaseSensitive)
+            || ClassPath.Contains(TEXT("ControlRigBlueprintGeneratedClass"), ESearchCase::CaseSensitive);
+    }
+
+    bool IsControlRigGeneratedClass(const UClass* ClassObject)
+    {
+        if (!ClassObject)
+        {
+            return false;
+        }
+
+        if (IsControlRigClassPath(ClassObject->GetPathName()))
+        {
+            return true;
+        }
+
+        const UClass* SuperClass = ClassObject->GetSuperClass();
+        return SuperClass && SuperClass->GetPathName().StartsWith(TEXT("/Script/ControlRig.ControlRig"), ESearchCase::CaseSensitive);
+    }
+
+    bool IsControlRigBackedBlueprintAsset(const UBlueprint* Blueprint)
+    {
+        if (!Blueprint)
+        {
+            return false;
+        }
+
+        if (const UClass* ParentClass = Blueprint->ParentClass)
+        {
+            if (ParentClass->GetPathName().StartsWith(TEXT("/Script/ControlRig.ControlRig"), ESearchCase::CaseSensitive))
+            {
+                return true;
+            }
+        }
+
+        if (const UClass* GeneratedClass = Blueprint->GeneratedClass)
+        {
+            if (IsControlRigGeneratedClass(GeneratedClass))
+            {
+                return true;
+            }
+        }
+
+        return IsControlRigClassPath(Blueprint->GetClass()->GetPathName());
+    }
+
+    UBlueprint* ResolveControlRigBlueprintAsset(UObject* Asset)
+    {
+        if (!Asset)
+        {
+            return nullptr;
+        }
+
+        if (UBlueprint* Blueprint = Cast<UBlueprint>(Asset))
+        {
+            return IsControlRigBackedBlueprintAsset(Blueprint) ? Blueprint : nullptr;
+        }
+
+        if (UClass* ClassObject = Cast<UClass>(Asset))
+        {
+            if (UBlueprint* Blueprint = Cast<UBlueprint>(ClassObject->ClassGeneratedBy))
+            {
+                return IsControlRigBackedBlueprintAsset(Blueprint) ? Blueprint : nullptr;
+            }
+        }
+
+        return nullptr;
+    }
+
+    bool IsResolvedControlRigObject(UObject* Asset)
+    {
+        return ResolveControlRigBlueprintAsset(Asset) != nullptr
+            || IsControlRigGeneratedClass(Cast<UClass>(Asset));
+    }
+
+#if UEARATAME_HAS_CONTROL_RIG_RUNTIME || UEARATAME_HAS_CONTROL_RIG_BLUEPRINT
+    USkeletalMesh* ResolveControlRigPreviewMesh(UBlueprint* RigBlueprint)
+    {
+        if (!RigBlueprint)
+        {
+            return nullptr;
+        }
+
+        if (FObjectPropertyBase* PreviewMeshProp = FindFProperty<FObjectPropertyBase>(RigBlueprint->GetClass(), TEXT("PreviewMesh")))
+        {
+            return Cast<USkeletalMesh>(PreviewMeshProp->GetObjectPropertyValue_InContainer(RigBlueprint));
+        }
+
+        return nullptr;
+    }
+
+    URigHierarchy* ResolveControlRigHierarchy(UBlueprint* RigBlueprint)
+    {
+        if (!RigBlueprint)
+        {
+            return nullptr;
+        }
+
+        if (FObjectPropertyBase* HierarchyProp = FindFProperty<FObjectPropertyBase>(RigBlueprint->GetClass(), TEXT("Hierarchy")))
+        {
+            return Cast<URigHierarchy>(HierarchyProp->GetObjectPropertyValue_InContainer(RigBlueprint));
+        }
+
+        return nullptr;
+    }
+
+    void PopulateControlRigHierarchyData(
+        UObject* RigObject,
+        const FString& RigName,
+        const FString& RigPath,
+        URigHierarchy* RigHierarchy,
+        const FString& SkeletonPath,
+        const bool bIsModularRig,
+        const bool bIsControlRigModule,
+        FBS_ControlRigData& OutRigData)
+    {
+        OutRigData.RigName = RigName;
+        OutRigData.SkeletonPath = SkeletonPath;
+
+        TSet<FString> EnabledFeatures;
+        TSet<FString> ControlNameSet;
+        TSet<FString> BoneNameSet;
+        TArray<FRigElementKey> ControlKeys;
+        TMap<FString, FString> BoneLookupByNormalizedName;
+        OutRigData.ControlToBoneMap.Reset();
+
+        auto NormalizeBoneCandidate = [](FString Name) -> FString
+        {
+            Name = Name.ToLower();
+            Name.ReplaceInline(TEXT(" "), TEXT(""));
+            Name.ReplaceInline(TEXT("-"), TEXT("_"));
+            Name.ReplaceInline(TEXT("."), TEXT("_"));
+
+            while (Name.ReplaceInline(TEXT("__"), TEXT("_"), ESearchCase::CaseSensitive) > 0)
+            {
+            }
+
+            while (Name.StartsWith(TEXT("_")))
+            {
+                Name.RightChopInline(1, EAllowShrinking::No);
+            }
+            while (Name.EndsWith(TEXT("_")))
+            {
+                Name.LeftChopInline(1, EAllowShrinking::No);
+            }
+
+            return Name;
+        };
+
+        auto BuildControlBoneCandidates = [&NormalizeBoneCandidate](const FString& ControlName) -> TArray<FString>
+        {
+            TArray<FString> Candidates;
+            auto AddCandidate = [&Candidates, &NormalizeBoneCandidate](const FString& Raw)
+            {
+                const FString Normalized = NormalizeBoneCandidate(Raw);
+                if (!Normalized.IsEmpty() && !Candidates.Contains(Normalized))
+                {
+                    Candidates.Add(Normalized);
+                }
+            };
+
+            FString Base = NormalizeBoneCandidate(ControlName);
+            const TArray<FString> Suffixes = {
+                TEXT("_control"),
+                TEXT("control"),
+                TEXT("_ctrl"),
+                TEXT("ctrl"),
+                TEXT("_pv"),
+                TEXT("pv")
+            };
+
+            for (const FString& Suffix : Suffixes)
+            {
+                if (Base.EndsWith(Suffix))
+                {
+                    Base.LeftChopInline(Suffix.Len(), EAllowShrinking::No);
+                    Base = NormalizeBoneCandidate(Base);
+                    break;
+                }
+            }
+
+            AddCandidate(Base);
+
+            auto AddSidedCandidates = [&AddCandidate](const FString& NameWithoutSide, const FString& SideSuffix)
+            {
+                if (NameWithoutSide.IsEmpty())
+                {
+                    return;
+                }
+
+                AddCandidate(NameWithoutSide + SideSuffix);
+                if (NameWithoutSide.Contains(TEXT("knee")))
+                {
+                    AddCandidate(FString(TEXT("calf")) + SideSuffix);
+                }
+            };
+
+            if (Base.StartsWith(TEXT("left")))
+            {
+                AddSidedCandidates(Base.Mid(4), TEXT("_l"));
+            }
+            else if (Base.StartsWith(TEXT("right")))
+            {
+                AddSidedCandidates(Base.Mid(5), TEXT("_r"));
+            }
+
+            if (Base.EndsWith(TEXT("left")))
+            {
+                AddSidedCandidates(Base.LeftChop(4), TEXT("_l"));
+            }
+            else if (Base.EndsWith(TEXT("right")))
+            {
+                AddSidedCandidates(Base.LeftChop(5), TEXT("_r"));
+            }
+
+            if (Base.Contains(TEXT("pelvis"))) AddCandidate(TEXT("pelvis"));
+            if (Base.Contains(TEXT("root"))) AddCandidate(TEXT("root"));
+
+            return Candidates;
+        };
+
+        if (RigHierarchy)
+        {
+            EnabledFeatures.Add(TEXT("Hierarchy"));
+
+            const TArray<FRigElementKey> AllKeys = RigHierarchy->GetAllKeys(false, ERigElementType::All);
+            for (const FRigElementKey& Key : AllKeys)
+            {
+                const FString KeyName = Key.Name.ToString();
+                if (KeyName.IsEmpty())
+                {
+                    continue;
+                }
+
+                if (Key.Type == ERigElementType::Control)
+                {
+                    ControlNameSet.Add(KeyName);
+                    ControlKeys.Add(Key);
+                }
+                else if (Key.Type == ERigElementType::Bone)
+                {
+                    BoneNameSet.Add(KeyName);
+                    const FString NormalizedBoneName = NormalizeBoneCandidate(KeyName);
+                    if (!NormalizedBoneName.IsEmpty())
+                    {
+                        BoneLookupByNormalizedName.Add(NormalizedBoneName, KeyName);
+                    }
+                }
+            }
+
+            for (const FRigElementKey& ControlKey : ControlKeys)
+            {
+                const FString ControlName = ControlKey.Name.ToString();
+                if (ControlName.IsEmpty())
+                {
+                    continue;
+                }
+
+                bool bMapped = false;
+                const TArray<FRigElementKey> ParentKeys = RigHierarchy->GetParents(ControlKey, true);
+                for (const FRigElementKey& ParentKey : ParentKeys)
+                {
+                    if (ParentKey.Type != ERigElementType::Bone)
+                    {
+                        continue;
+                    }
+
+                    const FString ParentBoneName = ParentKey.Name.ToString();
+                    if (!ParentBoneName.IsEmpty())
+                    {
+                        OutRigData.ControlToBoneMap.Add(ControlName, ParentBoneName);
+                        bMapped = true;
+                        break;
+                    }
+                }
+
+                if (bMapped)
+                {
+                    continue;
+                }
+
+                const TArray<FString> BoneCandidates = BuildControlBoneCandidates(ControlName);
+                for (const FString& Candidate : BoneCandidates)
+                {
+                    if (const FString* BoneName = BoneLookupByNormalizedName.Find(Candidate))
+                    {
+                        OutRigData.ControlToBoneMap.Add(ControlName, *BoneName);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (bIsModularRig)
+        {
+            EnabledFeatures.Add(TEXT("ModularRig"));
+        }
+
+        if (bIsControlRigModule)
+        {
+            EnabledFeatures.Add(TEXT("ControlRigModule"));
+        }
+
+        OutRigData.ControlNames = ControlNameSet.Array();
+        OutRigData.ControlNames.Sort();
+        OutRigData.BoneNames = BoneNameSet.Array();
+        OutRigData.BoneNames.Sort();
+        OutRigData.EnabledFeatures = EnabledFeatures.Array();
+        OutRigData.EnabledFeatures.Sort();
+
+        OutRigData.FeatureSettings.Add(TEXT("controlCount"), FString::FromInt(OutRigData.ControlNames.Num()));
+        OutRigData.FeatureSettings.Add(TEXT("boneCount"), FString::FromInt(OutRigData.BoneNames.Num()));
+        OutRigData.FeatureSettings.Add(TEXT("mappedControlCount"), FString::FromInt(OutRigData.ControlToBoneMap.Num()));
+        OutRigData.FeatureSettings.Add(TEXT("hasSkeleton"), OutRigData.SkeletonPath.IsEmpty() ? TEXT("false") : TEXT("true"));
+        OutRigData.RigProperties.Add(TEXT("rigPath"), RigPath);
+        OutRigData.RigProperties.Add(TEXT("isModularRig"), bIsModularRig ? TEXT("true") : TEXT("false"));
+        OutRigData.RigProperties.Add(TEXT("isControlRigModule"), bIsControlRigModule ? TEXT("true") : TEXT("false"));
+
+        if (RigObject)
+        {
+            OutRigData.RigProperties.Add(TEXT("rigClass"), RigObject->GetClass()->GetPathName());
+        }
+    }
+
+    void ExtractResolvedControlRigBlueprint(UBlueprint* RigBlueprint, FBS_ControlRigData& OutRigData)
+    {
+        if (!RigBlueprint || !IsControlRigBackedBlueprintAsset(RigBlueprint))
+        {
+            return;
+        }
+
+        FString ControlRigTypeValue;
+        if (FProperty* ControlRigTypeProperty = FindFProperty<FProperty>(RigBlueprint->GetClass(), TEXT("ControlRigType")))
+        {
+            ControlRigTypeValue = GetPropertyValueAsString(RigBlueprint, ControlRigTypeProperty);
+        }
+
+        FString SkeletonPath;
+        if (USkeletalMesh* PreviewMesh = ResolveControlRigPreviewMesh(RigBlueprint))
+        {
+            if (USkeleton* Skeleton = PreviewMesh->GetSkeleton())
+            {
+                SkeletonPath = Skeleton->GetPathName();
+            }
+        }
+
+        PopulateControlRigHierarchyData(
+            RigBlueprint,
+            RigBlueprint->GetName(),
+            RigBlueprint->GetPathName(),
+            ResolveControlRigHierarchy(RigBlueprint),
+            SkeletonPath,
+            ControlRigTypeValue.Contains(TEXT("ModularRig")),
+            ControlRigTypeValue.Contains(TEXT("RigModule")),
+            OutRigData);
+    }
+#endif
 
     void AddCandidatePath(const FString& RawPath, TSet<FString>& OutPaths)
     {
@@ -1429,15 +1802,18 @@ namespace
             }
 
             OutClosure.Assets.Add(Candidate);
-            if (Candidate.Contains(TEXT("ControlRig")) || Candidate.Contains(TEXT("/ControlRig/")))
-            {
-                OutClosure.ControlRigs.Add(Candidate);
-            }
 
             UObject* Loaded = TryLoadBestCandidate(Candidate);
             if (!Loaded)
             {
                 continue;
+            }
+
+            if (Candidate.Contains(TEXT("ControlRig"))
+                || Candidate.Contains(TEXT("/ControlRig/"))
+                || IsResolvedControlRigObject(Loaded))
+            {
+                OutClosure.ControlRigs.Add(Candidate);
             }
 
             if (UClass* ClassObj = Cast<UClass>(Loaded))
@@ -3797,16 +4173,7 @@ void UBlueprintAnalyzer::ExtractControlRigData(const TArray<FString>& AssetPaths
 		}
 
 		UObject* Asset = TryLoadBestCandidate(RawAssetPath);
-		UControlRigBlueprint* RigBlueprint = Cast<UControlRigBlueprint>(Asset);
-
-		if (!RigBlueprint)
-		{
-			if (UClass* RigClass = Cast<UClass>(Asset))
-			{
-				RigBlueprint = Cast<UControlRigBlueprint>(RigClass->ClassGeneratedBy);
-			}
-		}
-
+		UBlueprint* RigBlueprint = ResolveControlRigBlueprintAsset(Asset);
 		if (RigBlueprint)
 		{
 			const FString RigPath = NormalizeObjectPath(RigBlueprint->GetPathName(), true);
@@ -3817,8 +4184,28 @@ void UBlueprintAnalyzer::ExtractControlRigData(const TArray<FString>& AssetPaths
 			SeenAssets.Add(RigPath);
 
 			FBS_ControlRigData RigData;
-			ExtractControlRigGraph(RigBlueprint, RigData);
-			OutData.ControlRigs.Add(RigData);
+#if UEARATAME_HAS_CONTROL_RIG_BLUEPRINT
+			if (UControlRigBlueprint* TypedRigBlueprint = Cast<UControlRigBlueprint>(RigBlueprint))
+			{
+				ExtractControlRigGraph(TypedRigBlueprint, RigData);
+			}
+			else
+#endif
+#if UEARATAME_HAS_CONTROL_RIG_RUNTIME || UEARATAME_HAS_CONTROL_RIG_BLUEPRINT
+			{
+				ExtractResolvedControlRigBlueprint(RigBlueprint, RigData);
+			}
+#else
+			{
+				RigData.RigName = RigBlueprint->GetName();
+				RigData.RigProperties.Add(TEXT("rigPath"), RigBlueprint->GetPathName());
+			}
+#endif
+
+			if (!RigData.RigName.IsEmpty() || RigData.ControlNames.Num() > 0 || RigData.BoneNames.Num() > 0)
+			{
+				OutData.ControlRigs.Add(RigData);
+			}
 		}
 	}
 #endif
@@ -3826,223 +4213,33 @@ void UBlueprintAnalyzer::ExtractControlRigData(const TArray<FString>& AssetPaths
 
 void UBlueprintAnalyzer::ExtractControlRigGraph(UControlRigBlueprint* RigBlueprint, FBS_ControlRigData& OutRigData)
 {
-#if UEARATAME_HAS_CONTROL_RIG
+#if UEARATAME_HAS_CONTROL_RIG_BLUEPRINT
 	if (!RigBlueprint)
 	{
 		return;
 	}
 
-	OutRigData.RigName = RigBlueprint->GetName();
+	FString SkeletonPath;
 	if (FObjectProperty* PreviewMeshProp = FindFProperty<FObjectProperty>(RigBlueprint->GetClass(), TEXT("PreviewMesh")))
 	{
 		if (USkeletalMesh* PreviewMesh = Cast<USkeletalMesh>(PreviewMeshProp->GetObjectPropertyValue_InContainer(RigBlueprint)))
 		{
 			if (USkeleton* Skeleton = PreviewMesh->GetSkeleton())
 			{
-				OutRigData.SkeletonPath = Skeleton->GetPathName();
+				SkeletonPath = Skeleton->GetPathName();
 			}
 		}
 	}
 
-	TSet<FString> EnabledFeatures;
-	TSet<FString> ControlNameSet;
-	TSet<FString> BoneNameSet;
-	TArray<FRigElementKey> ControlKeys;
-	TMap<FString, FString> BoneLookupByNormalizedName;
-	OutRigData.ControlToBoneMap.Reset();
-
-	auto NormalizeBoneCandidate = [](FString Name) -> FString
-	{
-		Name = Name.ToLower();
-		Name.ReplaceInline(TEXT(" "), TEXT(""));
-		Name.ReplaceInline(TEXT("-"), TEXT("_"));
-		Name.ReplaceInline(TEXT("."), TEXT("_"));
-
-		while (Name.ReplaceInline(TEXT("__"), TEXT("_"), ESearchCase::CaseSensitive) > 0)
-		{
-		}
-
-		while (Name.StartsWith(TEXT("_")))
-		{
-			Name.RightChopInline(1, EAllowShrinking::No);
-		}
-		while (Name.EndsWith(TEXT("_")))
-		{
-			Name.LeftChopInline(1, EAllowShrinking::No);
-		}
-
-		return Name;
-	};
-
-	auto BuildControlBoneCandidates = [&NormalizeBoneCandidate](const FString& ControlName) -> TArray<FString>
-	{
-		TArray<FString> Candidates;
-		auto AddCandidate = [&Candidates, &NormalizeBoneCandidate](const FString& Raw)
-		{
-			const FString Normalized = NormalizeBoneCandidate(Raw);
-			if (!Normalized.IsEmpty() && !Candidates.Contains(Normalized))
-			{
-				Candidates.Add(Normalized);
-			}
-		};
-
-		FString Base = NormalizeBoneCandidate(ControlName);
-		const TArray<FString> Suffixes = {
-			TEXT("_control"),
-			TEXT("control"),
-			TEXT("_ctrl"),
-			TEXT("ctrl"),
-			TEXT("_pv"),
-			TEXT("pv")
-		};
-
-		for (const FString& Suffix : Suffixes)
-		{
-			if (Base.EndsWith(Suffix))
-			{
-				Base.LeftChopInline(Suffix.Len(), EAllowShrinking::No);
-				Base = NormalizeBoneCandidate(Base);
-				break;
-			}
-		}
-
-		AddCandidate(Base);
-
-		auto AddSidedCandidates = [&AddCandidate](const FString& NameWithoutSide, const FString& SideSuffix)
-		{
-			if (NameWithoutSide.IsEmpty())
-			{
-				return;
-			}
-
-			AddCandidate(NameWithoutSide + SideSuffix);
-			if (NameWithoutSide.Contains(TEXT("knee")))
-			{
-				AddCandidate(FString(TEXT("calf")) + SideSuffix);
-			}
-		};
-
-		if (Base.StartsWith(TEXT("left")))
-		{
-			AddSidedCandidates(Base.Mid(4), TEXT("_l"));
-		}
-		else if (Base.StartsWith(TEXT("right")))
-		{
-			AddSidedCandidates(Base.Mid(5), TEXT("_r"));
-		}
-
-		if (Base.EndsWith(TEXT("left")))
-		{
-			AddSidedCandidates(Base.LeftChop(4), TEXT("_l"));
-		}
-		else if (Base.EndsWith(TEXT("right")))
-		{
-			AddSidedCandidates(Base.LeftChop(5), TEXT("_r"));
-		}
-
-		if (Base.Contains(TEXT("pelvis"))) AddCandidate(TEXT("pelvis"));
-		if (Base.Contains(TEXT("root"))) AddCandidate(TEXT("root"));
-
-		return Candidates;
-	};
-
-	URigHierarchy* RigHierarchy = RigBlueprint->GetHierarchy();
-	if (RigHierarchy)
-	{
-		EnabledFeatures.Add(TEXT("Hierarchy"));
-
-		const TArray<FRigElementKey> AllKeys = RigHierarchy->GetAllKeys(false, ERigElementType::All);
-		for (const FRigElementKey& Key : AllKeys)
-		{
-			const FString KeyName = Key.Name.ToString();
-			if (KeyName.IsEmpty())
-			{
-				continue;
-			}
-
-			if (Key.Type == ERigElementType::Control)
-			{
-				ControlNameSet.Add(KeyName);
-				ControlKeys.Add(Key);
-			}
-			else if (Key.Type == ERigElementType::Bone)
-			{
-				BoneNameSet.Add(KeyName);
-				const FString NormalizedBoneName = NormalizeBoneCandidate(KeyName);
-				if (!NormalizedBoneName.IsEmpty())
-				{
-					BoneLookupByNormalizedName.Add(NormalizedBoneName, KeyName);
-				}
-			}
-		}
-
-		for (const FRigElementKey& ControlKey : ControlKeys)
-		{
-			const FString ControlName = ControlKey.Name.ToString();
-			if (ControlName.IsEmpty())
-			{
-				continue;
-			}
-
-			bool bMapped = false;
-			const TArray<FRigElementKey> ParentKeys = RigHierarchy->GetParents(ControlKey, true);
-			for (const FRigElementKey& ParentKey : ParentKeys)
-			{
-				if (ParentKey.Type != ERigElementType::Bone)
-				{
-					continue;
-				}
-
-				const FString ParentBoneName = ParentKey.Name.ToString();
-				if (!ParentBoneName.IsEmpty())
-				{
-					OutRigData.ControlToBoneMap.Add(ControlName, ParentBoneName);
-					bMapped = true;
-					break;
-				}
-			}
-
-			if (bMapped)
-			{
-				continue;
-			}
-
-			const TArray<FString> BoneCandidates = BuildControlBoneCandidates(ControlName);
-			for (const FString& Candidate : BoneCandidates)
-			{
-				if (const FString* BoneName = BoneLookupByNormalizedName.Find(Candidate))
-				{
-					OutRigData.ControlToBoneMap.Add(ControlName, *BoneName);
-					break;
-				}
-			}
-		}
-	}
-
-	if (RigBlueprint->IsModularRig())
-	{
-		EnabledFeatures.Add(TEXT("ModularRig"));
-	}
-
-	if (RigBlueprint->IsControlRigModule())
-	{
-		EnabledFeatures.Add(TEXT("ControlRigModule"));
-	}
-
-	OutRigData.ControlNames = ControlNameSet.Array();
-	OutRigData.ControlNames.Sort();
-	OutRigData.BoneNames = BoneNameSet.Array();
-	OutRigData.BoneNames.Sort();
-	OutRigData.EnabledFeatures = EnabledFeatures.Array();
-	OutRigData.EnabledFeatures.Sort();
-
-	OutRigData.FeatureSettings.Add(TEXT("controlCount"), FString::FromInt(OutRigData.ControlNames.Num()));
-	OutRigData.FeatureSettings.Add(TEXT("boneCount"), FString::FromInt(OutRigData.BoneNames.Num()));
-	OutRigData.FeatureSettings.Add(TEXT("mappedControlCount"), FString::FromInt(OutRigData.ControlToBoneMap.Num()));
-	OutRigData.FeatureSettings.Add(TEXT("hasSkeleton"), OutRigData.SkeletonPath.IsEmpty() ? TEXT("false") : TEXT("true"));
-	OutRigData.RigProperties.Add(TEXT("rigPath"), RigBlueprint->GetPathName());
-	OutRigData.RigProperties.Add(TEXT("isModularRig"), RigBlueprint->IsModularRig() ? TEXT("true") : TEXT("false"));
-	OutRigData.RigProperties.Add(TEXT("isControlRigModule"), RigBlueprint->IsControlRigModule() ? TEXT("true") : TEXT("false"));
+	PopulateControlRigHierarchyData(
+		RigBlueprint,
+		RigBlueprint->GetName(),
+		RigBlueprint->GetPathName(),
+		RigBlueprint->GetHierarchy(),
+		SkeletonPath,
+		RigBlueprint->IsModularRig(),
+		RigBlueprint->IsControlRigModule(),
+		OutRigData);
 
 	auto GetRigVMGraph = [RigBlueprint](const FName& GraphName) -> URigVMGraph*
 	{
@@ -5144,21 +5341,37 @@ FBS_NodeData UBlueprintAnalyzer::AnalyzeNodeToStruct(UEdGraphNode* Node)
             }
 
             // Variant identification
-            if (Cast<UK2Node_LatentAbilityCall>(K2))
+            const FString AsyncClassName = AsyncClass ? AsyncClass->GetName() : FString();
+            if (AsyncClassName == TEXT("K2Node_LatentAbilityCall"))
                 AddMeta(TEXT("meta.asyncTaskVariant"), TEXT("AbilityTask"));
-            else if (UK2Node_LatentGameplayTaskCall* TaskCall =
-                     Cast<UK2Node_LatentGameplayTaskCall>(K2))
+            else if (AsyncClassName == TEXT("K2Node_LatentGameplayTaskCall"))
             {
                 AddMeta(TEXT("meta.asyncTaskVariant"), TEXT("GameplayTask"));
-                if (TaskCall->SpawnParamPins.Num() > 0)
+                if (FArrayProperty* SpawnParamPinsProp = FindFProperty<FArrayProperty>(
+                        AsyncClass, TEXT("SpawnParamPins")))
                 {
-                    TArray<FString> PinStrs;
-                    for (const FName& PN : TaskCall->SpawnParamPins)
-                        PinStrs.Add(PN.ToString());
-                    AddMeta(TEXT("meta.spawnParamPins"),
-                        FString::Join(PinStrs, TEXT(";")));
-                    AddMeta(TEXT("meta.spawnParamPinCount"),
-                        FString::FromInt(TaskCall->SpawnParamPins.Num()));
+                    void* SpawnParamPinsPtr = SpawnParamPinsProp->ContainerPtrToValuePtr<void>(AsyncBase);
+                    if (SpawnParamPinsPtr && SpawnParamPinsProp->Inner)
+                    {
+                        FScriptArrayHelper SpawnParamPinsArray(SpawnParamPinsProp, SpawnParamPinsPtr);
+                        if (FNameProperty* SpawnParamNameProp = CastField<FNameProperty>(SpawnParamPinsProp->Inner))
+                        {
+                            TArray<FString> PinStrs;
+                            for (int32 PinIndex = 0; PinIndex < SpawnParamPinsArray.Num(); ++PinIndex)
+                            {
+                                const FName PinName = SpawnParamNameProp->GetPropertyValue(SpawnParamPinsArray.GetRawPtr(PinIndex));
+                                if (!PinName.IsNone())
+                                {
+                                    PinStrs.Add(PinName.ToString());
+                                }
+                            }
+                            if (PinStrs.Num() > 0)
+                            {
+                                AddMeta(TEXT("meta.spawnParamPins"), FString::Join(PinStrs, TEXT(";")));
+                                AddMeta(TEXT("meta.spawnParamPinCount"), FString::FromInt(PinStrs.Num()));
+                            }
+                        }
+                    }
                 }
             }
             else if (Cast<UK2Node_AsyncAction>(K2))
@@ -5320,9 +5533,15 @@ FBS_NodeData UBlueprintAnalyzer::AnalyzeNodeToStruct(UEdGraphNode* Node)
         if (UK2Node_InputKey* InpKey = Cast<UK2Node_InputKey>(K2))
         {
             AddMetaBool(TEXT("meta.isInputKey"), true);
-            AddMeta(TEXT("meta.inputKeyName"), InpKey->InputKey.GetFName().ToString());
-            AddMeta(TEXT("meta.inputKeyDisplayName"),
-                InpKey->InputKey.GetDisplayName().ToString());
+            if (FProperty* InputKeyProperty = FindFProperty<FProperty>(InpKey->GetClass(), TEXT("InputKey")))
+            {
+                const FString InputKeyValue = GetPropertyValueAsString(InpKey, InputKeyProperty);
+                if (!InputKeyValue.IsEmpty())
+                {
+                    AddMeta(TEXT("meta.inputKeyName"), InputKeyValue);
+                    AddMeta(TEXT("meta.inputKeyDisplayName"), InputKeyValue);
+                }
+            }
             AddMetaBool(TEXT("meta.inputKeyConsumed"),       InpKey->bConsumeInput  != 0);
             AddMetaBool(TEXT("meta.inputKeyWhenPaused"),     InpKey->bExecuteWhenPaused != 0);
             AddMetaBool(TEXT("meta.inputKeyOverrideParent"), InpKey->bOverrideParentBinding != 0);
@@ -5345,17 +5564,21 @@ FBS_NodeData UBlueprintAnalyzer::AnalyzeNodeToStruct(UEdGraphNode* Node)
         }
 
         // --- Task 45: EnhancedInputAction — UInputAction-bound event node ---
-        if (UK2Node_EnhancedInputAction* EIA = Cast<UK2Node_EnhancedInputAction>(K2))
+        if (K2->GetClass() && K2->GetClass()->GetName() == TEXT("K2Node_EnhancedInputAction"))
         {
             AddMetaBool(TEXT("meta.isEnhancedInputAction"), true);
-            if (EIA->InputAction)
+            if (FObjectPropertyBase* InputActionProp = FindFProperty<FObjectPropertyBase>(
+                    K2->GetClass(), TEXT("InputAction")))
             {
-                AddMeta(TEXT("meta.inputActionPath"), EIA->InputAction->GetPathName());
-                AddMeta(TEXT("meta.inputActionName"), EIA->InputAction->GetName());
+                if (UObject* InputAction = InputActionProp->GetObjectPropertyValue_InContainer(K2))
+                {
+                    AddMeta(TEXT("meta.inputActionPath"), InputAction->GetPathName());
+                    AddMeta(TEXT("meta.inputActionName"), InputAction->GetName());
+                }
             }
             // Collect trigger event exec output pins (Triggered, Started, Ongoing, etc.)
             TArray<FString> TriggerPins;
-            for (UEdGraphPin* Pin : EIA->Pins)
+            for (UEdGraphPin* Pin : K2->Pins)
             {
                 if (Pin && Pin->Direction == EGPD_Output
                     && Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
