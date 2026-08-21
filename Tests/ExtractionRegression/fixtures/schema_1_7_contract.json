@@ -38,18 +38,21 @@
               "name": "A",
               "direction": "Input",
               "category": "real",
+              "subCategory": "double",
               "connected": true
             },
             {
               "name": "B",
               "direction": "Input",
               "category": "real",
+              "subCategory": "double",
               "defaultValue": "1.000000"
             },
             {
               "name": "Result",
               "direction": "Output",
               "category": "real",
+              "subCategory": "double",
               "is_out": true
             },
             {

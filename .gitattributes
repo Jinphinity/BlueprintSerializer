@@ -1,0 +1,6 @@
+/.gitattributes text eol=lf
+/Source/BlueprintSerializer/Private/BlueprintAnalyzer.cpp text eol=lf
+/Tests/ExtractionRegression/check_export_contract.py text eol=lf
+/Tests/ExtractionRegression/test_export_contract.py text eol=lf
+/Tests/ExtractionRegression/fixtures/schema_1_7_contract.json text eol=lf
+/Tests/ExtractionRegression/fixtures/schema_1_7_tease_contract.json text eol=lf

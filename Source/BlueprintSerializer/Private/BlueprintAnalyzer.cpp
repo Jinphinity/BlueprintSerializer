@@ -793,6 +793,34 @@ namespace
             return false;
         }
 
+        FString ValueCategory;
+        FString ValueObjectPath;
+        bool bRequiresCoherentRealSubCategory = false;
+        if (*EaseFunctionName == TEXT("Ease"))
+        {
+            ValueCategory = TEXT("real");
+            bRequiresCoherentRealSubCategory = true;
+        }
+        else if (*EaseFunctionName == TEXT("VEase"))
+        {
+            ValueCategory = TEXT("struct");
+            ValueObjectPath = TEXT("/Script/CoreUObject.Vector");
+        }
+        else if (*EaseFunctionName == TEXT("REase"))
+        {
+            ValueCategory = TEXT("struct");
+            ValueObjectPath = TEXT("/Script/CoreUObject.Rotator");
+        }
+        else if (*EaseFunctionName == TEXT("TEase"))
+        {
+            ValueCategory = TEXT("struct");
+            ValueObjectPath = TEXT("/Script/CoreUObject.Transform");
+        }
+        else
+        {
+            return false;
+        }
+
         struct FRequiredEasePin
         {
             const TCHAR* Name;
@@ -805,13 +833,15 @@ namespace
         static const FRequiredEasePin RequiredPins[] = {
             { TEXT("Function"),     TEXT("Input"),  TEXT("byte"), false, false },
             { TEXT("Alpha"),        TEXT("Input"),  TEXT("real"), true,  false },
-            { TEXT("A"),            TEXT("Input"),  TEXT("real"), true,  false },
-            { TEXT("B"),            TEXT("Input"),  TEXT("real"), true,  false },
-            { TEXT("Result"),       TEXT("Output"), TEXT("real"), false, true  },
+            { TEXT("A"),            TEXT("Input"),  nullptr,      true,  false },
+            { TEXT("B"),            TEXT("Input"),  nullptr,      true,  false },
+            { TEXT("Result"),       TEXT("Output"), nullptr,      false, true  },
             { TEXT("ShortestPath"), TEXT("Input"),  TEXT("bool"), true,  false },
             { TEXT("BlendExp"),     TEXT("Input"),  TEXT("real"), true,  false },
             { TEXT("Steps"),        TEXT("Input"),  TEXT("int"),  true,  false },
         };
+
+        FString CoherentRealSubCategory;
 
         for (const FRequiredEasePin& Required : RequiredPins)
         {
@@ -830,13 +860,43 @@ namespace
 
             if (!MatchingPin
                 || MatchingPin->Direction != Required.Direction
-                || MatchingPin->Category != Required.Category
+                || (Required.Category && MatchingPin->Category != Required.Category)
                 || (Required.bRequiresValueOrConnection
                     && !MatchingPin->bConnected
                     && MatchingPin->DefaultValue.IsEmpty())
                 || (Required.bRequiresOutputFlag && !MatchingPin->bIsOut))
             {
                 return false;
+            }
+
+            if (!Required.Category)
+            {
+                if (MatchingPin->Category != ValueCategory)
+                {
+                    return false;
+                }
+
+                if (bRequiresCoherentRealSubCategory)
+                {
+                    if (MatchingPin->SubCategory != TEXT("float")
+                        && MatchingPin->SubCategory != TEXT("double"))
+                    {
+                        return false;
+                    }
+
+                    if (CoherentRealSubCategory.IsEmpty())
+                    {
+                        CoherentRealSubCategory = MatchingPin->SubCategory;
+                    }
+                    else if (MatchingPin->SubCategory != CoherentRealSubCategory)
+                    {
+                        return false;
+                    }
+                }
+                else if (MatchingPin->ObjectPath != ValueObjectPath)
+                {
+                    return false;
+                }
             }
 
             if (MatchingPin->Name == FName(TEXT("Function"))

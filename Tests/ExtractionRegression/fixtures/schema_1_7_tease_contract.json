@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "1.7",
+  "totalNodeCount": 1,
+  "graphNodes": [
+    "{\"nodeType\":\"K2Node_EaseFunction\",\"nodeGuid\":\"55555555555555555555555555555555\"}"
+  ],
+  "structuredGraphs": [
+    {
+      "name": "TransformInterpolation",
+      "graphType": "Function",
+      "nodes": [
+        {
+          "nodeType": "K2Node_EaseFunction",
+          "nodeGuid": "55555555555555555555555555555555",
+          "nodeProperties": {
+            "EaseFunctionName": "TEase"
+          },
+          "pins": [
+            {
+              "name": "Function",
+              "direction": "Input",
+              "category": "byte",
+              "objectPath": "/Script/Engine.EEasingFunc",
+              "defaultValue": "EaseInOut"
+            },
+            {
+              "name": "Alpha",
+              "direction": "Input",
+              "category": "real",
+              "subCategory": "double",
+              "connected": true
+            },
+            {
+              "name": "A",
+              "direction": "Input",
+              "category": "struct",
+              "objectType": "Transform",
+              "objectPath": "/Script/CoreUObject.Transform",
+              "connected": true
+            },
+            {
+              "name": "B",
+              "direction": "Input",
+              "category": "struct",
+              "objectType": "Transform",
+              "objectPath": "/Script/CoreUObject.Transform",
+              "connected": true
+            },
+            {
+              "name": "Result",
+              "direction": "Output",
+              "category": "struct",
+              "objectType": "Transform",
+              "objectPath": "/Script/CoreUObject.Transform",
+              "is_out": true
+            },
+            {
+              "name": "ShortestPath",
+              "direction": "Input",
+              "category": "bool",
+              "defaultValue": "true"
+            },
+            {
+              "name": "BlendExp",
+              "direction": "Input",
+              "category": "real",
+              "defaultValue": "2.0"
+            },
+            {
+              "name": "Steps",
+              "direction": "Input",
+              "category": "int",
+              "defaultValue": "2"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "partiallySupportedNodeTypes": []
+  },
+  "detailedFunctions": [],
+  "compilerIRFallback": {
+    "partiallySupportedNodeTypeCount": 0,
+    "partiallySupportedNodeTypes": [],
+    "bytecodeBackedFunctions": []
+  }
+}

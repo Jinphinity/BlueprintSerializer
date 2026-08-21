@@ -17,9 +17,14 @@ class ExportContractTests(unittest.TestCase):
     def setUp(self) -> None:
         fixture = TEST_DIR / "fixtures" / "schema_1_7_contract.json"
         self.document = json.loads(fixture.read_text(encoding="utf-8"))
+        tease_fixture = TEST_DIR / "fixtures" / "schema_1_7_tease_contract.json"
+        self.tease_document = json.loads(tease_fixture.read_text(encoding="utf-8"))
 
     def test_schema_1_7_fixture_passes(self) -> None:
         self.assertEqual(validate_export_contract(self.document), [])
+
+    def test_schema_1_7_tease_fixture_passes(self) -> None:
+        self.assertEqual(validate_export_contract(self.tease_document), [])
 
     def test_missing_collapsed_body_in_flat_surface_fails(self) -> None:
         broken = copy.deepcopy(self.document)
@@ -86,6 +91,50 @@ class ExportContractTests(unittest.TestCase):
         alpha_pin.pop("connected")
         issues = validate_export_contract(broken)
         self.assertTrue(any("Alpha has neither" in issue for issue in issues))
+
+    def test_tease_function_requires_a_value_or_connection(self) -> None:
+        broken = copy.deepcopy(self.tease_document)
+        a_pin = next(
+            pin for pin in self._ease_node(broken)["pins"] if pin["name"] == "A"
+        )
+        a_pin.pop("connected")
+        issues = validate_export_contract(broken)
+        self.assertTrue(any("A has neither" in issue for issue in issues))
+
+    def test_tease_function_rejects_wrong_value_type(self) -> None:
+        broken = copy.deepcopy(self.tease_document)
+        result_pin = next(
+            pin for pin in self._ease_node(broken)["pins"] if pin["name"] == "Result"
+        )
+        result_pin["objectPath"] = "/Script/CoreUObject.Vector"
+        issues = validate_export_contract(broken)
+        self.assertTrue(
+            any("Result.objectPath is not /Script/CoreUObject.Transform" in issue for issue in issues)
+        )
+
+    def test_scalar_ease_requires_coherent_precision(self) -> None:
+        broken = copy.deepcopy(self.document)
+        b_pin = next(
+            pin for pin in self._ease_node(broken)["pins"] if pin["name"] == "B"
+        )
+        b_pin["subCategory"] = "float"
+        issues = validate_export_contract(broken)
+        self.assertTrue(any("subCategory is not coherent" in issue for issue in issues))
+
+    def test_vector_and_rotator_ease_contracts_pass(self) -> None:
+        for function_name, object_path in (
+            ("VEase", "/Script/CoreUObject.Vector"),
+            ("REase", "/Script/CoreUObject.Rotator"),
+        ):
+            with self.subTest(function_name=function_name):
+                document = copy.deepcopy(self.tease_document)
+                node = self._ease_node(document)
+                node["nodeProperties"]["EaseFunctionName"] = function_name
+                for pin in node["pins"]:
+                    if pin["name"] in {"A", "B", "Result"}:
+                        pin["objectPath"] = object_path
+                        pin["objectType"] = object_path.rsplit(".", 1)[-1]
+                self.assertEqual(validate_export_contract(document), [])
 
     def test_ease_function_cannot_remain_partial(self) -> None:
         broken = copy.deepcopy(self.document)

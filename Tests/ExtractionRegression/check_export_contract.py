@@ -16,12 +16,18 @@ EASE_FUNCTION_NODE_TYPE = "K2Node_EaseFunction"
 EASE_REQUIRED_PINS = {
     "Function": ("Input", "byte"),
     "Alpha": ("Input", "real"),
-    "A": ("Input", "real"),
-    "B": ("Input", "real"),
-    "Result": ("Output", "real"),
+    "A": ("Input", None),
+    "B": ("Input", None),
+    "Result": ("Output", None),
     "ShortestPath": ("Input", "bool"),
     "BlendExp": ("Input", "real"),
     "Steps": ("Input", "int"),
+}
+EASE_VALUE_CONTRACTS = {
+    "Ease": {"category": "real", "subCategories": {"float", "double"}},
+    "VEase": {"category": "struct", "objectPath": "/Script/CoreUObject.Vector"},
+    "REase": {"category": "struct", "objectPath": "/Script/CoreUObject.Rotator"},
+    "TEase": {"category": "struct", "objectPath": "/Script/CoreUObject.Transform"},
 }
 
 
@@ -84,12 +90,22 @@ def _validate_ease_function_contract(
     node: dict[str, Any], location: str, issues: list[str]
 ) -> None:
     properties = node.get("nodeProperties")
+    ease_function_name: str | None = None
     if not isinstance(properties, dict):
         issues.append(f"{location}.nodeProperties is not an object")
     elif not isinstance(properties.get("EaseFunctionName"), str) or not properties.get(
         "EaseFunctionName"
     ):
         issues.append(f"{location}.nodeProperties.EaseFunctionName is missing")
+    else:
+        ease_function_name = properties["EaseFunctionName"]
+
+    value_contract = EASE_VALUE_CONTRACTS.get(ease_function_name or "")
+    if ease_function_name and value_contract is None:
+        issues.append(
+            f"{location}.nodeProperties.EaseFunctionName {ease_function_name!r} "
+            "has no supported value-pin contract"
+        )
 
     pins = node.get("pins")
     if not isinstance(pins, list):
@@ -105,6 +121,7 @@ def _validate_ease_function_contract(
         if isinstance(name, str):
             pins_by_name.setdefault(name, []).append(pin)
 
+    coherent_real_sub_category: str | None = None
     for name, (direction, category) in EASE_REQUIRED_PINS.items():
         matches = pins_by_name.get(name, [])
         if len(matches) != 1:
@@ -115,8 +132,34 @@ def _validate_ease_function_contract(
         pin = matches[0]
         if pin.get("direction") != direction:
             issues.append(f"{location}.{name}.direction is not {direction}")
-        if pin.get("category") != category:
+        if category is not None and pin.get("category") != category:
             issues.append(f"{location}.{name}.category is not {category}")
+        elif category is None and value_contract is not None:
+            expected_category = value_contract["category"]
+            if pin.get("category") != expected_category:
+                issues.append(
+                    f"{location}.{name}.category is not {expected_category} "
+                    f"for {ease_function_name}"
+                )
+            elif ease_function_name == "Ease":
+                sub_category = pin.get("subCategory")
+                allowed_sub_categories = value_contract["subCategories"]
+                if sub_category not in allowed_sub_categories:
+                    issues.append(
+                        f"{location}.{name}.subCategory is not float or double for Ease"
+                    )
+                elif coherent_real_sub_category is None:
+                    coherent_real_sub_category = sub_category
+                elif sub_category != coherent_real_sub_category:
+                    issues.append(
+                        f"{location}.{name}.subCategory is not coherent with "
+                        f"{coherent_real_sub_category} Ease value pins"
+                    )
+            elif pin.get("objectPath") != value_contract["objectPath"]:
+                issues.append(
+                    f"{location}.{name}.objectPath is not "
+                    f"{value_contract['objectPath']} for {ease_function_name}"
+                )
 
         if name == "Result":
             if pin.get("is_out") is not True:
