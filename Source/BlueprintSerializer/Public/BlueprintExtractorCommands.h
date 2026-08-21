@@ -31,8 +31,8 @@ public:
     static void RegisterCommands();
     static void UnregisterCommands();
 
-private:
-    // Core export commands
+    // Console callbacks must be public because the delegates are constructed at
+    // namespace scope, outside the class's access context.
     static void ExportSingleBlueprint(const TArray<FString>& Args);
     static void ExportAllBlueprints(const TArray<FString>& Args);
     static void ExportCompleteProjectData(const TArray<FString>& Args);
@@ -43,7 +43,6 @@ private:
     static void AuditAnimationCurves(const TArray<FString>& Args);
     static void RunRegressionSuite(const TArray<FString>& Args);
 
-    // Dependency mapping commands
     static void ExtractAssetDependencies(const TArray<FString>& Args);
     static void ExtractProjectDependencyMap(const TArray<FString>& Args);
     static void MapAssetNetwork(const TArray<FString>& Args);

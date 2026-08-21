@@ -1887,9 +1887,9 @@ namespace
 			const TSharedPtr<FJsonObject> Props = NodeObj->GetObjectField(TEXT("nodeProperties"));
 			if (Props.IsValid())
 			{
-				for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Props->Values)
+				for (const auto& Pair : Props->Values)
 				{
-					const FString& PropName = Pair.Key;
+					const FString PropName(*Pair.Key);
 					const FString PropValue = Pair.Value.IsValid() ? Pair.Value->AsString() : FString();
 					if (PropName.IsEmpty())
 					{

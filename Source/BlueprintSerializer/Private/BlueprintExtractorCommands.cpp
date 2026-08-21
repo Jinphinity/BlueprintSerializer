@@ -1018,14 +1018,15 @@ void FBlueprintExtractorCommands::RunRegressionSuite(const TArray<FString>& Args
         }
         else
         {
-            for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : BaselineValidationMinMetrics->Values)
+            for (const auto& Pair : BaselineValidationMinMetrics->Values)
             {
                 double MinValue = 0.0;
                 if (!Pair.Value.IsValid() || !Pair.Value->TryGetNumber(MinValue))
                 {
                     continue;
                 }
-                RequireMetricAtLeast(ValidationMetrics, Pair.Key, MinValue, TEXT("validation"));
+                const FString MetricName(*Pair.Key);
+                RequireMetricAtLeast(ValidationMetrics, MetricName, MinValue, TEXT("validation"));
             }
         }
 
@@ -1036,14 +1037,15 @@ void FBlueprintExtractorCommands::RunRegressionSuite(const TArray<FString>& Args
         }
         else
         {
-            for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : BaselineCurveMinMetrics->Values)
+            for (const auto& Pair : BaselineCurveMinMetrics->Values)
             {
                 double MinValue = 0.0;
                 if (!Pair.Value.IsValid() || !Pair.Value->TryGetNumber(MinValue))
                 {
                     continue;
                 }
-                RequireMetricAtLeast(CurveMetrics, Pair.Key, MinValue, TEXT("curveAudit"));
+                const FString MetricName(*Pair.Key);
+                RequireMetricAtLeast(CurveMetrics, MetricName, MinValue, TEXT("curveAudit"));
             }
         }
     }

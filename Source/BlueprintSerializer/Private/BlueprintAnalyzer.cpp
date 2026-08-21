@@ -6639,10 +6639,10 @@ TSharedPtr<FJsonObject> UBlueprintAnalyzer::BlueprintDataToJsonObject(const FBS_
 		if (DetailedLocalVarArray.Num() > 0)
 			FuncObj->SetArrayField(TEXT("detailedLocalVariables"), DetailedLocalVarArray);
 
-			// Structured typed input parameters for C++ code generation
-			TArray<TSharedPtr<FJsonValue>> DetailedInputParamArray;
-			for (const FBS_ParamInfo& PInfo : FuncInfo.DetailedInputParams)
-			{
+		// Structured typed input parameters for C++ code generation
+		TArray<TSharedPtr<FJsonValue>> DetailedInputParamArray;
+		for (const FBS_ParamInfo& PInfo : FuncInfo.DetailedInputParams)
+		{
 				TSharedPtr<FJsonObject> PIObj = MakeShareable(new FJsonObject);
 				PIObj->SetStringField(TEXT("paramName"),      PInfo.ParamName);
 				PIObj->SetStringField(TEXT("typeCategory"),   PInfo.TypeCategory);
@@ -6665,14 +6665,14 @@ TSharedPtr<FJsonObject> UBlueprintAnalyzer::BlueprintDataToJsonObject(const FBS_
 				if (!PInfo.Description.IsEmpty())
 					PIObj->SetStringField(TEXT("description"), PInfo.Description);
 				DetailedInputParamArray.Add(MakeShareable(new FJsonValueObject(PIObj)));
-			}
-			if (DetailedInputParamArray.Num() > 0)
-				FuncObj->SetArrayField(TEXT("detailedInputParams"), DetailedInputParamArray);
+		}
+		if (DetailedInputParamArray.Num() > 0)
+			FuncObj->SetArrayField(TEXT("detailedInputParams"), DetailedInputParamArray);
 
-			// Structured typed output parameters for C++ code generation
-			TArray<TSharedPtr<FJsonValue>> DetailedOutputParamArray;
-			for (const FBS_ParamInfo& PInfo : FuncInfo.DetailedOutputParams)
-			{
+		// Structured typed output parameters for C++ code generation
+		TArray<TSharedPtr<FJsonValue>> DetailedOutputParamArray;
+		for (const FBS_ParamInfo& PInfo : FuncInfo.DetailedOutputParams)
+		{
 				TSharedPtr<FJsonObject> PIObj = MakeShareable(new FJsonObject);
 				PIObj->SetStringField(TEXT("paramName"),      PInfo.ParamName);
 				PIObj->SetStringField(TEXT("typeCategory"),   PInfo.TypeCategory);
@@ -6695,9 +6695,9 @@ TSharedPtr<FJsonObject> UBlueprintAnalyzer::BlueprintDataToJsonObject(const FBS_
 				if (!PInfo.Description.IsEmpty())
 					PIObj->SetStringField(TEXT("description"), PInfo.Description);
 				DetailedOutputParamArray.Add(MakeShareable(new FJsonValueObject(PIObj)));
-			}
-			if (DetailedOutputParamArray.Num() > 0)
-				FuncObj->SetArrayField(TEXT("detailedOutputParams"), DetailedOutputParamArray);
+		}
+		if (DetailedOutputParamArray.Num() > 0)
+			FuncObj->SetArrayField(TEXT("detailedOutputParams"), DetailedOutputParamArray);
 
 		DetailedFuncArray.Add(MakeShareable(new FJsonValueObject(FuncObj)));
 	}
