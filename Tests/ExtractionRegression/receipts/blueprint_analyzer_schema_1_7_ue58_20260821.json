@@ -1,0 +1,178 @@
+{
+  "schema": "blueprintserializer-extraction-regression-receipt-v1",
+  "generatedAtUtc": "2026-08-21T15:10:45Z",
+  "binarySourceCommit": "dc002c393c568cdddf947d7742003166b29af445",
+  "analyzerSchemaVersion": "1.7",
+  "engineVersion": "5.8.0-55116800",
+  "changeUnderTest": {
+    "flatGraphNodes": "Every reachable K2Node_Composite BoundGraph is visited recursively with a duplicate/cycle guard, so legacy graphNodes contains the same node GUID set as structuredGraphs.",
+    "rawBytecode": "The former bytecodeHash field was removed. Raw UFunction::Script MD5 values are emitted only as rawInMemoryBytecodeDiagnostic with canonical=false, stabilityScope=single_loaded_function_instance, and semanticEquivalenceProof=false.",
+    "sourceFiles": [
+      {
+        "path": "Source/BlueprintSerializer/Private/BlueprintAnalyzer.cpp",
+        "bytes": 407445,
+        "sha256": "AEB0FA56365946E20A017E5A100916D99BE0A8792A20F93D570C21D7929484D8"
+      },
+      {
+        "path": "Source/BlueprintSerializer/Private/BlueprintExtractorBlueprintLibrary.cpp",
+        "bytes": 103331,
+        "sha256": "DDA3373E2F7E4D91D0E9E563916D79F9EF1F869DCC9CAFD26334EBD990001ABB"
+      },
+      {
+        "path": "Source/BlueprintSerializer/Public/BlueprintAnalyzer.h",
+        "bytes": 38105,
+        "sha256": "85F2B0C75B8B794BFA805E3556F66A38CE888BF3EFC6B06EEFAD669FB5DAB223"
+      }
+    ]
+  },
+  "offlineRegression": {
+    "command": "py -3 -m unittest discover -s Tests/ExtractionRegression -p test_*.py -v",
+    "result": "pass",
+    "testCount": 5,
+    "cases": [
+      "schema 1.7 aligned contract passes",
+      "structured node omitted from flat graphNodes fails",
+      "duplicate flat node GUID fails",
+      "legacy bytecodeHash fails",
+      "different explicitly noncanonical raw diagnostic MD5 values do not fail semantic contract"
+    ]
+  },
+  "build": {
+    "host": ".codex-tmp/serializer-schema17-ue58-20260821/HostProject",
+    "result": "pass",
+    "compiler": "MSVC 14.50.35721",
+    "toolchainPolicy": "UE 5.8 bans this installed compiler range; the isolated HostProjectEditor target set MicrosoftPlatformSDK.IgnoreToolchainErrors without modifying installed Engine files. Three runtime export smokes below corroborate the resulting binary.",
+    "targetSource": {
+      "path": ".codex-tmp/serializer-schema17-ue58-20260821/HostProject/Source/HostProjectEditor.Target.cs",
+      "bytes": 932,
+      "sha256": "135BB5D29DF7C15BE8E4CBFA604AB0A83BED497CBA95144C6CECEE109A497358"
+    },
+    "argv": [
+      "X:/Program Files/Epic Games/UE_5.8/Engine/Binaries/ThirdParty/DotNet/10.0/win-x64/dotnet.exe",
+      "X:/Program Files/Epic Games/UE_5.8/Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.dll",
+      "HostProjectEditor",
+      "Win64",
+      "Development",
+      "-Project=C:/Users/jinph/Documents/ChatGPT/DizzysDisease/.codex-tmp/serializer-schema17-ue58-20260821/HostProject/HostProject.uproject",
+      "-WaitMutex",
+      "-NoHotReloadFromIDE",
+      "-NoUBTMakefiles"
+    ],
+    "processId": 80132,
+    "logPath": ".codex-tmp/serializer-schema17-ue58-20260821/ubt-schema17.stdout.log",
+    "logBytes": 3002,
+    "logSha256": "1AA5B07E6A6CAF4136A932EA58DCCC3083178040338E09E8685EF634B1578F87",
+    "package": {
+      "verifiedPath": ".codex-tmp/serializer-schema17-ue58-20260821/verified-package/BlueprintSerializer",
+      "dllBytes": 1808384,
+      "dllSha256": "3C8A940B5D38FFAD2194A1A45B80478E81CB29FC013530D2CE5BF3901073263E",
+      "pdbBytes": 76763136,
+      "pdbSha256": "339CC7AB2E53F3825081C61CFF05C6B2AB48CB094CA11FCD72B633B6798C384D",
+      "modulesBytes": 116,
+      "modulesSha256": "0E5557DDDFC24405D8C17CFAEE56F7B9C54F72FA0CAE77871C6AD6C501D601D7",
+      "buildId": "55116800",
+      "descriptorBytes": 1480,
+      "descriptorSha256": "4551C227EDC2ED99A0FF0BA46B7EB0B0B390C7C862F71F7072A48C0269BD0CC0"
+    }
+  },
+  "runs": [
+    {
+      "name": "MST AC_GM_SaveManager recursive collapsed-graph parity",
+      "processId": 97468,
+      "assetPath": "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager",
+      "exportPath": ".codex-tmp/serializer-reexports-ue58-20260821/mst/Saved/BlueprintExports/BP_SLZR_Blueprint_AC_GM_SaveManager_b189fc55_20260821_110235.json",
+      "exportBytes": 7475928,
+      "exportSha256": "D7B68C75C225A1F18AEB61A7EDD7D3DC3AB21BA11B3AE46C4E5F98366CAC26A4",
+      "logPath": ".codex-tmp/serializer-schema17-ue58-20260821/smoke/schema17-mst-ac-gm-save-manager.log",
+      "logBytes": 462830,
+      "logSha256": "AC302C487C2A68EAF933D7E324220098014164FDDCC44CFFCABEFB13EACA89A3",
+      "explicitExportSuccess": true,
+      "contractCheckerPass": true,
+      "controlledPostSuccessStop": true,
+      "graphCount": 71,
+      "collapsedGraphCount": 16,
+      "maximumGraphDepth": 3,
+      "flatNodeCount": 1086,
+      "flatUniqueGuidCount": 1086,
+      "structuredNodeCount": 1086,
+      "structuredUniqueGuidCount": 1086,
+      "structuredGuidMissingFromFlatCount": 0,
+      "flatGuidMissingFromStructuredCount": 0,
+      "totalNodeCount": 1086,
+      "rawInMemoryBytecodeDiagnosticCount": 40,
+      "legacyBytecodeHashCount": 0,
+      "unsupportedNodeTypeCount": 0,
+      "partiallySupportedNodeTypeCount": 0,
+      "sourceAssetBytes": 2358104,
+      "sourceAssetSha256Before": "CFAA20E978C8CA7EA28ABC9CA906A02A77AFAC75043499C3AB9BAB6C53C56A8E",
+      "sourceAssetSha256After": "CFAA20E978C8CA7EA28ABC9CA906A02A77AFAC75043499C3AB9BAB6C53C56A8E"
+    },
+    {
+      "name": "Horror Reading_WB UMG source-layout smoke",
+      "processId": 55512,
+      "assetPath": "/Game/HorrorEngine/Blueprints/Widgets/MainHUD/Reading_WB.Reading_WB",
+      "exportPath": ".codex-tmp/serializer-reexports-ue58-20260821/horror/Saved/BlueprintExports/BP_SLZR_Blueprint_Reading_WB_5da0f2eb_20260821_110409.json",
+      "exportBytes": 23887,
+      "exportSha256": "79DA256DF26251050955970CD16DBAB9A7088FBD34C45E519E5867A1A5B2019E",
+      "logPath": ".codex-tmp/serializer-schema17-ue58-20260821/smoke/schema17-horror-reading-wb.log",
+      "logBytes": 315110,
+      "logSha256": "EB0C7B8EC1C88DF492716AA5CE135ACD28353E0CEAC1412220DE5216C29E9F2A",
+      "explicitExportSuccess": true,
+      "contractCheckerPass": true,
+      "controlledPostSuccessStop": true,
+      "graphCount": 1,
+      "flatNodeCount": 0,
+      "structuredNodeCount": 0,
+      "totalNodeCount": 0,
+      "isWidgetBlueprint": true,
+      "hasSourceWidgetTree": true,
+      "rootWidgetName": "CanvasPanel_0",
+      "widgetCount": 4,
+      "bindingCount": 0,
+      "animationCount": 0,
+      "legacyBytecodeHashCount": 0,
+      "unsupportedNodeTypeCount": 0,
+      "partiallySupportedNodeTypeCount": 0,
+      "sourceAssetBytes": 25268,
+      "sourceAssetSha256Before": "3C2F01453276DF1F824F8D6CC58C8460B2DCAF515BE50F4A3853FA1A7B698E1F",
+      "sourceAssetSha256After": "3C2F01453276DF1F824F8D6CC58C8460B2DCAF515BE50F4A3853FA1A7B698E1F"
+    },
+    {
+      "name": "FPS BP_PlayerCharacter flat/structured parity and diagnostic downgrade",
+      "processId": 64780,
+      "assetPath": "/Game/FPS/Blueprints/CharacterAndClasses/BP_PlayerCharacter.BP_PlayerCharacter",
+      "exportPath": ".codex-tmp/serializer-reexports-ue58-20260821/fps/Saved/BlueprintExports/BP_SLZR_Blueprint_BP_PlayerCharacter_5a26ccaa_20260821_110743.json",
+      "exportBytes": 27761134,
+      "exportSha256": "4B11AD65D935FA06646382E4F779E17F3CE482ACBEB5BAD078F091D82AF3B021",
+      "logPath": ".codex-tmp/serializer-schema17-ue58-20260821/smoke/schema17-fps-player-character.log",
+      "logBytes": 1368665,
+      "logSha256": "8DC754A10B17F6A9BC3CAC6B1A5691B939E119DBEDE7A98BAD342437DFE40969",
+      "explicitExportSuccess": true,
+      "contractCheckerPass": true,
+      "controlledPostSuccessStop": true,
+      "graphCount": 532,
+      "flatNodeCount": 3927,
+      "flatUniqueGuidCount": 3927,
+      "structuredNodeCount": 3927,
+      "structuredUniqueGuidCount": 3927,
+      "structuredGuidMissingFromFlatCount": 0,
+      "flatGuidMissingFromStructuredCount": 0,
+      "totalNodeCount": 3927,
+      "rawInMemoryBytecodeDiagnosticCount": 59,
+      "rawDiagnosticsAllCanonicalFalse": true,
+      "legacyBytecodeHashCount": 0,
+      "unsupportedNodeTypeCount": 0,
+      "partiallySupportedNodeTypeCount": 0,
+      "sourceAssetBytes": 6660700,
+      "sourceAssetSha256Before": "DD6516DD9BCA8FD06096C8CFDECCF5961C5D13AE3EE1E6F2466B1E9D7405EE8E",
+      "sourceAssetSha256After": "DD6516DD9BCA8FD06096C8CFDECCF5961C5D13AE3EE1E6F2466B1E9D7405EE8E"
+    }
+  ],
+  "limitations": [
+    "The UE 5.8 compiler override does not make the banned MSVC toolchain generally supported; it was isolated and runtime-smoke corroborated.",
+    "Raw UFunction::Script bytes are retained only as process/load-local diagnostics. This patch deliberately does not claim or invent a canonical semantic function hash.",
+    "The five-asset RPG re-export is a separate same-binary handoff and is not claimed by this receipt.",
+    "The full historical corpus regression suite has not been run against this UE 5.8 package.",
+    "This receipt proves extraction/build regression only; it is not gameplay, PIE, multiplayer, reconstruction, or synthesized C++ implementation proof."
+  ]
+}
