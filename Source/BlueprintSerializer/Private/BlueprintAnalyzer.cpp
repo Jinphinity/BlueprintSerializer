@@ -759,6 +759,7 @@ namespace
             TEXT("K2Node_GetInputAxisKeyValue"),                  // Input axis float value by key
             TEXT("K2Node_LoadAssetClass"),                        // Async soft class loader (BaseAsyncTask pattern)
             TEXT("K2Node_MapForEach"),                            // Map loop with key/value/break/completed pins
+            TEXT("K2Node_AddComponentByClass"),                   // Runtime component class + attachment/deferred-finish contract
             TEXT("GameplayTagsK2Node_SwitchGameplayTag"),         // Gameplay-tag switch cases and pins
             TEXT("K2Node_GetInputActionValue"),                   // Enhanced Input action-value read
         };
@@ -5555,6 +5556,135 @@ FBS_NodeData UBlueprintAnalyzer::AnalyzeNodeToStruct(UEdGraphNode* Node)
             }
             if (ResultPin)
                 AddMeta(TEXT("meta.createResultPinId"), ResultPin->PinId.ToString());
+        }
+
+        // AddComponentByClass inherits ConstructObjectFromClass, but its compiler expansion has
+        // component-specific attachment and deferred-finish semantics that the generic factory
+        // metadata above cannot express. Keep this handler class-name based so the serializer
+        // remains source-compatible with UE versions where the concrete node's API visibility
+        // differs, while still exporting every reconstructable input from the stable pin contract.
+        if (K2->GetClass()->GetName() == TEXT("K2Node_AddComponentByClass"))
+        {
+            AddMetaBool(TEXT("meta.isAddComponentByClass"), true);
+            AddMeta(TEXT("meta.addComponentExpansionFunction"),
+                TEXT("/Script/Engine.Actor:AddComponentByClass"));
+            AddMeta(TEXT("meta.addComponentFinishFunction"),
+                TEXT("/Script/Engine.Actor:FinishAddComponent"));
+
+            auto EmitAddComponentPin = [&](const TCHAR* PinName,
+                                           EEdGraphPinDirection Direction,
+                                           const TCHAR* PinIdKey) -> UEdGraphPin*
+            {
+                UEdGraphPin* Pin = K2->FindPin(FName(PinName), Direction);
+                if (Pin)
+                {
+                    AddMeta(PinIdKey, Pin->PinId.ToString());
+                    AddMeta(FString(PinIdKey) + TEXT("Type"),
+                        DescribePinTypeDetailed(Pin->PinType));
+                }
+                return Pin;
+            };
+
+            EmitAddComponentPin(TEXT("execute"), EGPD_Input,
+                TEXT("meta.addComponentExecutePinId"));
+            EmitAddComponentPin(TEXT("self"), EGPD_Input,
+                TEXT("meta.addComponentOwnerPinId"));
+            EmitAddComponentPin(TEXT("then"), EGPD_Output,
+                TEXT("meta.addComponentThenPinId"));
+            UEdGraphPin* ClassPin = EmitAddComponentPin(TEXT("Class"), EGPD_Input,
+                TEXT("meta.addComponentClassPinId"));
+            UEdGraphPin* ResultPin = EmitAddComponentPin(TEXT("ReturnValue"), EGPD_Output,
+                TEXT("meta.addComponentResultPinId"));
+            UEdGraphPin* ManualAttachmentPin = EmitAddComponentPin(
+                TEXT("bManualAttachment"), EGPD_Input,
+                TEXT("meta.addComponentManualAttachmentPinId"));
+            UEdGraphPin* RelativeTransformPin = EmitAddComponentPin(
+                TEXT("RelativeTransform"), EGPD_Input,
+                TEXT("meta.addComponentRelativeTransformPinId"));
+
+            if (ClassPin)
+            {
+                AddMetaBool(TEXT("meta.addComponentClassIsDynamic"),
+                    ClassPin->LinkedTo.Num() > 0);
+                if (!ClassPin->DefaultValue.IsEmpty())
+                    AddMeta(TEXT("meta.addComponentClassDefault"), ClassPin->DefaultValue);
+                if (ClassPin->DefaultObject)
+                {
+                    AddMeta(TEXT("meta.addComponentClassPath"),
+                        ClassPin->DefaultObject->GetPathName());
+                    AddMeta(TEXT("meta.addComponentClassName"),
+                        ClassPin->DefaultObject->GetName());
+                    if (const UClass* ComponentClass = Cast<UClass>(ClassPin->DefaultObject))
+                    {
+                        AddMetaBool(TEXT("meta.addComponentClassIsSceneComponent"),
+                            ComponentClass->IsChildOf(USceneComponent::StaticClass()));
+                    }
+                }
+            }
+
+            if (ResultPin)
+            {
+                if (ResultPin->PinType.PinSubCategoryObject.IsValid())
+                {
+                    AddMeta(TEXT("meta.addComponentResultClass"),
+                        ResultPin->PinType.PinSubCategoryObject->GetPathName());
+                }
+            }
+
+            if (ManualAttachmentPin)
+            {
+                AddMeta(TEXT("meta.addComponentManualAttachmentDefaultRaw"),
+                    ManualAttachmentPin->DefaultValue);
+                AddMetaBool(TEXT("meta.addComponentManualAttachmentDefault"),
+                    ManualAttachmentPin->DefaultValue.Equals(
+                        TEXT("true"), ESearchCase::IgnoreCase));
+                AddMetaBool(TEXT("meta.addComponentManualAttachmentPinHidden"),
+                    ManualAttachmentPin->bHidden);
+            }
+
+            if (RelativeTransformPin)
+            {
+                AddMeta(TEXT("meta.addComponentRelativeTransformDefaultRaw"),
+                    RelativeTransformPin->DefaultValue);
+                AddMetaBool(TEXT("meta.addComponentRelativeTransformUsesIdentityDefault"),
+                    RelativeTransformPin->LinkedTo.Num() == 0
+                    && RelativeTransformPin->DefaultValue.IsEmpty()
+                    && RelativeTransformPin->DefaultObject == nullptr
+                    && RelativeTransformPin->DefaultTextValue.IsEmpty());
+                AddMetaBool(TEXT("meta.addComponentRelativeTransformPinHidden"),
+                    RelativeTransformPin->bHidden);
+            }
+
+            TArray<FString> ExposeOnSpawnPins;
+            for (UEdGraphPin* Pin : K2->Pins)
+            {
+                if (!Pin || Pin->Direction != EGPD_Input
+                    || Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec
+                    || Pin->PinName == UEdGraphSchema_K2::PN_Self
+                    || Pin->PinName == TEXT("Class")
+                    || Pin->PinName == TEXT("bManualAttachment")
+                    || Pin->PinName == TEXT("RelativeTransform"))
+                {
+                    continue;
+                }
+
+                ExposeOnSpawnPins.Add(FString::Printf(TEXT("%s:%s:%s"),
+                    *Pin->PinName.ToString(),
+                    *Pin->PinId.ToString(),
+                    *DescribePinTypeDetailed(Pin->PinType)));
+            }
+            ExposeOnSpawnPins.Sort();
+            AddMetaBool(TEXT("meta.addComponentHasExposeOnSpawnPins"),
+                ExposeOnSpawnPins.Num() > 0);
+            AddMeta(TEXT("meta.addComponentExposeOnSpawnPinCount"),
+                FString::FromInt(ExposeOnSpawnPins.Num()));
+            if (ExposeOnSpawnPins.Num() > 0)
+            {
+                AddMeta(TEXT("meta.addComponentExposeOnSpawnPins"),
+                    FString::Join(ExposeOnSpawnPins, TEXT(";")));
+            }
+            AddMetaBool(TEXT("meta.addComponentRequiresDeferredFinish"),
+                ExposeOnSpawnPins.Num() > 0);
         }
 
         // --- Task 42: FormatText — FText formatting with named dynamic argument slots ---
