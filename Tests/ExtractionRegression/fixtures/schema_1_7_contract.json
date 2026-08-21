@@ -1,10 +1,11 @@
 {
   "schemaVersion": "1.7",
-  "totalNodeCount": 3,
+  "totalNodeCount": 4,
   "graphNodes": [
     "{\"nodeType\":\"K2Node_CustomEvent\",\"nodeGuid\":\"11111111111111111111111111111111\"}",
     "{\"nodeType\":\"K2Node_Composite\",\"nodeGuid\":\"22222222222222222222222222222222\"}",
-    "{\"nodeType\":\"K2Node_Tunnel\",\"nodeGuid\":\"33333333333333333333333333333333\"}"
+    "{\"nodeType\":\"K2Node_Tunnel\",\"nodeGuid\":\"33333333333333333333333333333333\"}",
+    "{\"nodeType\":\"K2Node_EaseFunction\",\"nodeGuid\":\"44444444444444444444444444444444\"}"
   ],
   "structuredGraphs": [
     {
@@ -12,7 +13,65 @@
       "graphType": "Ubergraph",
       "nodes": [
         {"nodeType": "K2Node_CustomEvent", "nodeGuid": "11111111111111111111111111111111"},
-        {"nodeType": "K2Node_Composite", "nodeGuid": "22222222222222222222222222222222"}
+        {"nodeType": "K2Node_Composite", "nodeGuid": "22222222222222222222222222222222"},
+        {
+          "nodeType": "K2Node_EaseFunction",
+          "nodeGuid": "44444444444444444444444444444444",
+          "nodeProperties": {
+            "EaseFunctionName": "Ease"
+          },
+          "pins": [
+            {
+              "name": "Function",
+              "direction": "Input",
+              "category": "byte",
+              "objectPath": "/Script/Engine.EEasingFunc",
+              "defaultValue": "SinusoidalInOut"
+            },
+            {
+              "name": "Alpha",
+              "direction": "Input",
+              "category": "real",
+              "connected": true
+            },
+            {
+              "name": "A",
+              "direction": "Input",
+              "category": "real",
+              "connected": true
+            },
+            {
+              "name": "B",
+              "direction": "Input",
+              "category": "real",
+              "defaultValue": "1.000000"
+            },
+            {
+              "name": "Result",
+              "direction": "Output",
+              "category": "real",
+              "is_out": true
+            },
+            {
+              "name": "ShortestPath",
+              "direction": "Input",
+              "category": "bool",
+              "defaultValue": "true"
+            },
+            {
+              "name": "BlendExp",
+              "direction": "Input",
+              "category": "real",
+              "defaultValue": "2.0"
+            },
+            {
+              "name": "Steps",
+              "direction": "Input",
+              "category": "int",
+              "defaultValue": "2"
+            }
+          ]
+        }
       ]
     },
     {
@@ -25,6 +84,9 @@
       ]
     }
   ],
+  "coverage": {
+    "partiallySupportedNodeTypes": []
+  },
   "detailedFunctions": [
     {
       "name": "TestFunction",
@@ -40,6 +102,8 @@
     }
   ],
   "compilerIRFallback": {
+    "partiallySupportedNodeTypeCount": 0,
+    "partiallySupportedNodeTypes": [],
     "bytecodeBackedFunctions": [
       {
         "name": "TestFunction",

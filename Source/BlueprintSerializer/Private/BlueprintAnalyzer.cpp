@@ -780,6 +780,76 @@ namespace
         return SupportedTypes.Contains(NodeType);
     }
 
+    bool HasCompleteEaseFunctionContract(const FBS_NodeData& Node)
+    {
+        if (Node.NodeType != TEXT("K2Node_EaseFunction"))
+        {
+            return false;
+        }
+
+        const FString* EaseFunctionName = Node.NodeProperties.Find(TEXT("EaseFunctionName"));
+        if (!EaseFunctionName || EaseFunctionName->IsEmpty())
+        {
+            return false;
+        }
+
+        struct FRequiredEasePin
+        {
+            const TCHAR* Name;
+            const TCHAR* Direction;
+            const TCHAR* Category;
+            bool bRequiresValueOrConnection;
+            bool bRequiresOutputFlag;
+        };
+
+        static const FRequiredEasePin RequiredPins[] = {
+            { TEXT("Function"),     TEXT("Input"),  TEXT("byte"), false, false },
+            { TEXT("Alpha"),        TEXT("Input"),  TEXT("real"), true,  false },
+            { TEXT("A"),            TEXT("Input"),  TEXT("real"), true,  false },
+            { TEXT("B"),            TEXT("Input"),  TEXT("real"), true,  false },
+            { TEXT("Result"),       TEXT("Output"), TEXT("real"), false, true  },
+            { TEXT("ShortestPath"), TEXT("Input"),  TEXT("bool"), true,  false },
+            { TEXT("BlendExp"),     TEXT("Input"),  TEXT("real"), true,  false },
+            { TEXT("Steps"),        TEXT("Input"),  TEXT("int"),  true,  false },
+        };
+
+        for (const FRequiredEasePin& Required : RequiredPins)
+        {
+            const FBS_PinData* MatchingPin = nullptr;
+            for (const FBS_PinData& Pin : Node.Pins)
+            {
+                if (Pin.Name == FName(Required.Name))
+                {
+                    if (MatchingPin)
+                    {
+                        return false;
+                    }
+                    MatchingPin = &Pin;
+                }
+            }
+
+            if (!MatchingPin
+                || MatchingPin->Direction != Required.Direction
+                || MatchingPin->Category != Required.Category
+                || (Required.bRequiresValueOrConnection
+                    && !MatchingPin->bConnected
+                    && MatchingPin->DefaultValue.IsEmpty())
+                || (Required.bRequiresOutputFlag && !MatchingPin->bIsOut))
+            {
+                return false;
+            }
+
+            if (MatchingPin->Name == FName(TEXT("Function"))
+                && (MatchingPin->ObjectPath != TEXT("/Script/Engine.EEasingFunc")
+                    || (!MatchingPin->bConnected && MatchingPin->DefaultValue.IsEmpty())))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     bool IsContentObjectPath(const FString& Path)
     {
         if (!Path.StartsWith(TEXT("/"))
@@ -1929,7 +1999,7 @@ FBS_BlueprintData UBlueprintAnalyzer::AnalyzeBlueprint(UBlueprint* Blueprint)
 		{
 			for (const FBS_NodeData& Node : Graph.Nodes)
 			{
-				if (IsNodeTypeKnownSupported(Node.NodeType))
+				if (IsNodeTypeKnownSupported(Node.NodeType) || HasCompleteEaseFunctionContract(Node))
 				{
 					continue;
 				}

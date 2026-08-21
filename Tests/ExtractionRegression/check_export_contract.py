@@ -12,6 +12,17 @@ from typing import Any
 
 
 MD5_RE = re.compile(r"^[0-9a-fA-F]{32}$")
+EASE_FUNCTION_NODE_TYPE = "K2Node_EaseFunction"
+EASE_REQUIRED_PINS = {
+    "Function": ("Input", "byte"),
+    "Alpha": ("Input", "real"),
+    "A": ("Input", "real"),
+    "B": ("Input", "real"),
+    "Result": ("Output", "real"),
+    "ShortestPath": ("Input", "bool"),
+    "BlendExp": ("Input", "real"),
+    "Steps": ("Input", "int"),
+}
 
 
 def _flat_node_guids(document: dict[str, Any], issues: list[str]) -> list[str]:
@@ -69,6 +80,95 @@ def _validate_raw_diagnostic(value: Any, location: str, issues: list[str]) -> No
         issues.append(f"{location}.value is not a 32-hex MD5 diagnostic")
 
 
+def _validate_ease_function_contract(
+    node: dict[str, Any], location: str, issues: list[str]
+) -> None:
+    properties = node.get("nodeProperties")
+    if not isinstance(properties, dict):
+        issues.append(f"{location}.nodeProperties is not an object")
+    elif not isinstance(properties.get("EaseFunctionName"), str) or not properties.get(
+        "EaseFunctionName"
+    ):
+        issues.append(f"{location}.nodeProperties.EaseFunctionName is missing")
+
+    pins = node.get("pins")
+    if not isinstance(pins, list):
+        issues.append(f"{location}.pins is not an array")
+        return
+
+    pins_by_name: dict[str, list[dict[str, Any]]] = {}
+    for pin_index, pin in enumerate(pins):
+        if not isinstance(pin, dict):
+            issues.append(f"{location}.pins[{pin_index}] is not an object")
+            continue
+        name = pin.get("name")
+        if isinstance(name, str):
+            pins_by_name.setdefault(name, []).append(pin)
+
+    for name, (direction, category) in EASE_REQUIRED_PINS.items():
+        matches = pins_by_name.get(name, [])
+        if len(matches) != 1:
+            issues.append(
+                f"{location} requires exactly one {name} pin; found {len(matches)}"
+            )
+            continue
+        pin = matches[0]
+        if pin.get("direction") != direction:
+            issues.append(f"{location}.{name}.direction is not {direction}")
+        if pin.get("category") != category:
+            issues.append(f"{location}.{name}.category is not {category}")
+
+        if name == "Result":
+            if pin.get("is_out") is not True:
+                issues.append(f"{location}.Result.is_out must be true")
+            continue
+
+        if name == "Function":
+            if pin.get("objectPath") != "/Script/Engine.EEasingFunc":
+                issues.append(
+                    f"{location}.Function.objectPath is not /Script/Engine.EEasingFunc"
+                )
+
+        if pin.get("connected") is not True and not pin.get("defaultValue"):
+            issues.append(f"{location}.{name} has neither a connection nor a default")
+
+
+def _validate_ease_function_support(
+    document: dict[str, Any], ease_node_count: int, issues: list[str]
+) -> None:
+    if ease_node_count == 0:
+        return
+
+    coverage = document.get("coverage")
+    if not isinstance(coverage, dict):
+        issues.append("coverage is missing for K2Node_EaseFunction support")
+    else:
+        partial = coverage.get("partiallySupportedNodeTypes")
+        if not isinstance(partial, list):
+            issues.append("coverage.partiallySupportedNodeTypes is not an array")
+        elif EASE_FUNCTION_NODE_TYPE in partial:
+            issues.append("coverage still classifies K2Node_EaseFunction as partial")
+
+    fallback = document.get("compilerIRFallback")
+    if not isinstance(fallback, dict):
+        issues.append("compilerIRFallback is missing for K2Node_EaseFunction support")
+        return
+    partial = fallback.get("partiallySupportedNodeTypes")
+    if not isinstance(partial, list):
+        issues.append(
+            "compilerIRFallback.partiallySupportedNodeTypes is not an array"
+        )
+    elif EASE_FUNCTION_NODE_TYPE in partial:
+        issues.append(
+            "compilerIRFallback still classifies K2Node_EaseFunction as partial"
+        )
+    partial_count = fallback.get("partiallySupportedNodeTypeCount")
+    if isinstance(partial, list) and partial_count != len(partial):
+        issues.append(
+            "compilerIRFallback.partiallySupportedNodeTypeCount does not match its array"
+        )
+
+
 def validate_export_contract(document: dict[str, Any]) -> list[str]:
     issues: list[str] = []
     if document.get("schemaVersion") != "1.7":
@@ -91,6 +191,21 @@ def validate_export_contract(document: dict[str, Any]) -> list[str]:
             "totalNodeCount does not equal the structured node cardinality: "
             f"reported={document.get('totalNodeCount')} actual={len(structured_guids)}"
         )
+
+    ease_node_count = 0
+    for graph_index, graph in enumerate(document.get("structuredGraphs") or []):
+        if not isinstance(graph, dict):
+            continue
+        for node_index, node in enumerate(graph.get("nodes") or []):
+            if not isinstance(node, dict) or node.get("nodeType") != EASE_FUNCTION_NODE_TYPE:
+                continue
+            ease_node_count += 1
+            _validate_ease_function_contract(
+                node,
+                f"structuredGraphs[{graph_index}].nodes[{node_index}]",
+                issues,
+            )
+    _validate_ease_function_support(document, ease_node_count, issues)
 
     for index, function in enumerate(document.get("detailedFunctions") or []):
         if not isinstance(function, dict):
