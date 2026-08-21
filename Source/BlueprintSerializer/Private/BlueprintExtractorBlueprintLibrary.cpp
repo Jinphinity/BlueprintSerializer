@@ -9,6 +9,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "Misc/DateTime.h"
 #include "Misc/FileHelper.h"
+#include "Misc/PackageName.h"
 #include "Misc/SecureHash.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -442,6 +443,102 @@ namespace
 
 	static TSharedPtr<FJsonObject> JsonValueAsObject(const TSharedPtr<FJsonValue>& Value);
 
+	// Round-trip reconstruction consumes paths that came from donor-authored Blueprint pins and
+	// property text. Never pass those strings directly to UObject loading: malformed legacy values
+	// such as "//Server" make CoreUObject fail-fast while attempting to create a package. Preserve
+	// the raw string in the exported JSON, but only resolve it when it is a syntactically valid
+	// object/package path or a conservative reflection identifier.
+	static bool TryNormalizeSafeLoadIdentifier(const FString& RawIdentifier, FString& OutIdentifier)
+	{
+		OutIdentifier = RawIdentifier;
+		OutIdentifier.TrimStartAndEndInline();
+		if (OutIdentifier.IsEmpty())
+		{
+			return false;
+		}
+
+		if (!OutIdentifier.StartsWith(TEXT("/")) && OutIdentifier.Contains(TEXT("'")))
+		{
+			OutIdentifier = FPackageName::ExportTextPathToObjectPath(OutIdentifier);
+			OutIdentifier.TrimStartAndEndInline();
+		}
+
+		if (OutIdentifier.StartsWith(TEXT("/")))
+		{
+			if (OutIdentifier.Len() < 3
+				|| OutIdentifier.StartsWith(TEXT("//"))
+				|| OutIdentifier.Contains(TEXT("//"))
+				|| OutIdentifier.Contains(TEXT("\\")))
+			{
+				return false;
+			}
+
+			int32 LastSlashIndex = INDEX_NONE;
+			OutIdentifier.FindLastChar(TEXT('/'), LastSlashIndex);
+			const int32 ObjectDelimiterIndex = OutIdentifier.Find(
+				TEXT("."), ESearchCase::CaseSensitive, ESearchDir::FromStart,
+				FMath::Max(LastSlashIndex + 1, 0));
+
+			if (ObjectDelimiterIndex != INDEX_NONE)
+			{
+				return FPackageName::IsValidObjectPath(OutIdentifier);
+			}
+
+			return FPackageName::IsValidLongPackageName(OutIdentifier, true);
+		}
+
+		for (const TCHAR Ch : OutIdentifier)
+		{
+			if (!FChar::IsAlnum(Ch)
+				&& Ch != TEXT('_')
+				&& Ch != TEXT(':')
+				&& Ch != TEXT('.'))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	template <typename TObjectType>
+	static TObjectType* LoadObjectFromValidatedIdentifier(const FString& RawIdentifier)
+	{
+		FString SafeIdentifier;
+		if (!TryNormalizeSafeLoadIdentifier(RawIdentifier, SafeIdentifier))
+		{
+			return nullptr;
+		}
+
+		return LoadObject<TObjectType>(nullptr, *SafeIdentifier);
+	}
+
+	static UObject* StaticLoadObjectFromValidatedIdentifier(
+		UClass* ExpectedClass,
+		const FString& RawIdentifier)
+	{
+		FString SafeIdentifier;
+		if (!ExpectedClass
+			|| !TryNormalizeSafeLoadIdentifier(RawIdentifier, SafeIdentifier))
+		{
+			return nullptr;
+		}
+
+		return StaticLoadObject(ExpectedClass, nullptr, *SafeIdentifier);
+	}
+
+	template <typename TObjectType>
+	static TObjectType* TryFindTypeFromValidatedIdentifier(const FString& RawIdentifier)
+	{
+		FString SafeIdentifier;
+		if (!TryNormalizeSafeLoadIdentifier(RawIdentifier, SafeIdentifier))
+		{
+			return nullptr;
+		}
+
+		return UClass::TryFindTypeSlow<TObjectType>(SafeIdentifier);
+	}
+
 	template <typename TObjectType>
 	static TObjectType* FindLoadedObjectByNameOrPath(const FString& NameOrPath)
 	{
@@ -522,7 +619,7 @@ namespace
 			return nullptr;
 		}
 
-		if (UClass* FoundByType = UClass::TryFindTypeSlow<UClass>(ClassNameOrPath))
+		if (UClass* FoundByType = TryFindTypeFromValidatedIdentifier<UClass>(ClassNameOrPath))
 		{
 			return FoundByType;
 		}
@@ -535,13 +632,13 @@ namespace
 
 		if (ClassNameOrPath.StartsWith(TEXT("/")))
 		{
-			if (UClass* Loaded = LoadObject<UClass>(nullptr, *ClassNameOrPath))
+			if (UClass* Loaded = LoadObjectFromValidatedIdentifier<UClass>(ClassNameOrPath))
 			{
 				return Loaded;
 			}
 		}
 
-		return LoadObject<UClass>(nullptr, *ClassNameOrPath);
+		return LoadObjectFromValidatedIdentifier<UClass>(ClassNameOrPath);
 	}
 
 	static UClass* FindClassBySimpleName(const FString& ClassName)
@@ -633,7 +730,7 @@ namespace
 			return nullptr;
 		}
 
-		if (UEnum* FoundByType = UClass::TryFindTypeSlow<UEnum>(EnumName))
+		if (UEnum* FoundByType = TryFindTypeFromValidatedIdentifier<UEnum>(EnumName))
 		{
 			return FoundByType;
 		}
@@ -645,7 +742,8 @@ namespace
 
 		if (EnumName.StartsWith(TEXT("/")))
 		{
-			if (UObject* Loaded = StaticLoadObject(UObject::StaticClass(), nullptr, *EnumName))
+			if (UObject* Loaded = StaticLoadObjectFromValidatedIdentifier(
+				UObject::StaticClass(), EnumName))
 			{
 				return Loaded;
 			}
@@ -661,7 +759,8 @@ namespace
 			return nullptr;
 		}
 
-		if (UScriptStruct* FoundByType = UClass::TryFindTypeSlow<UScriptStruct>(StructName))
+		if (UScriptStruct* FoundByType =
+			TryFindTypeFromValidatedIdentifier<UScriptStruct>(StructName))
 		{
 			return FoundByType;
 		}
@@ -673,7 +772,8 @@ namespace
 
 		if (StructName.StartsWith(TEXT("/")))
 		{
-			if (UObject* Loaded = StaticLoadObject(UObject::StaticClass(), nullptr, *StructName))
+			if (UObject* Loaded = StaticLoadObjectFromValidatedIdentifier(
+				UObject::StaticClass(), StructName))
 			{
 				return Loaded;
 			}
@@ -1206,7 +1306,8 @@ namespace
 		const FString SubCategoryObjectPath = ExtractLocalVarField(VarTypeString, TEXT("PinSubCategoryObject"));
 		if (!SubCategoryObjectPath.IsEmpty())
 		{
-			if (UObject* Obj = StaticLoadObject(UObject::StaticClass(), nullptr, *SubCategoryObjectPath))
+			if (UObject* Obj = StaticLoadObjectFromValidatedIdentifier(
+				UObject::StaticClass(), SubCategoryObjectPath))
 			{
 				PinType.PinSubCategoryObject = Obj;
 			}
@@ -1262,7 +1363,7 @@ namespace
 			FString EnumPath;
 			if (PinObj->TryGetStringField(TEXT("objectPath"), EnumPath) && !EnumPath.IsEmpty())
 			{
-				if (UEnum* EnumObj = LoadObject<UEnum>(nullptr, *EnumPath))
+				if (UEnum* EnumObj = LoadObjectFromValidatedIdentifier<UEnum>(EnumPath))
 				{
 					Pin->PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
 					Pin->PinType.PinSubCategoryObject = EnumObj;
@@ -1273,7 +1374,8 @@ namespace
 		FString ObjPath;
 		if (PinObj->TryGetStringField(TEXT("defaultObjectPath"), ObjPath) && !ObjPath.IsEmpty())
 		{
-			UObject* Obj = StaticLoadObject(UObject::StaticClass(), nullptr, *ObjPath);
+			UObject* Obj = StaticLoadObjectFromValidatedIdentifier(
+				UObject::StaticClass(), ObjPath);
 			if (Obj)
 			{
 				Pin->DefaultObject = Obj;
@@ -1448,7 +1550,7 @@ namespace
 					const FString EnumPath = Props->GetStringField(TEXT("Enum"));
 					if (!EnumPath.IsEmpty())
 					{
-						if (UEnum* EnumObj = LoadObject<UEnum>(nullptr, *EnumPath))
+						if (UEnum* EnumObj = LoadObjectFromValidatedIdentifier<UEnum>(EnumPath))
 						{
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6
 							SwitchEnum->Enum = EnumObj;
@@ -1543,7 +1645,7 @@ namespace
 					FString EnumPath;
 					if (Props->TryGetStringField(TEXT("Enum"), EnumPath) && !EnumPath.IsEmpty() && !EnumPath.Equals(TEXT("None"), ESearchCase::IgnoreCase))
 					{
-						EnumObj = LoadObject<UEnum>(nullptr, *EnumPath);
+						EnumObj = LoadObjectFromValidatedIdentifier<UEnum>(EnumPath);
 					}
 
 					FString IndexPinTypeStr;
@@ -1591,7 +1693,7 @@ namespace
 								FString EnumPath;
 								if (PinObj->TryGetStringField(TEXT("objectPath"), EnumPath) && !EnumPath.IsEmpty())
 								{
-									EnumObj = LoadObject<UEnum>(nullptr, *EnumPath);
+									EnumObj = LoadObjectFromValidatedIdentifier<UEnum>(EnumPath);
 								}
 							}
 						}
@@ -1658,7 +1760,8 @@ namespace
 					const FString StructPath = Props->GetStringField(TEXT("StructType"));
 					if (!StructPath.IsEmpty())
 					{
-						if (UScriptStruct* StructObj = LoadObject<UScriptStruct>(nullptr, *StructPath))
+						if (UScriptStruct* StructObj =
+							LoadObjectFromValidatedIdentifier<UScriptStruct>(StructPath))
 						{
 							SetObjectPropertyByName(BreakStruct, TEXT("StructType"), StructObj);
 						}
@@ -2026,7 +2129,8 @@ namespace
 		PinObj->TryGetStringField(TEXT("objectPath"), ObjectPath);
 		if (!ObjectPath.IsEmpty())
 		{
-			if (UObject* Obj = StaticLoadObject(UObject::StaticClass(), nullptr, *ObjectPath))
+			if (UObject* Obj = StaticLoadObjectFromValidatedIdentifier(
+				UObject::StaticClass(), ObjectPath))
 			{
 				PinType.PinSubCategoryObject = Obj;
 			}
@@ -2037,15 +2141,16 @@ namespace
 			PinObj->TryGetStringField(TEXT("objectType"), ObjectType);
 			if (!ObjectType.IsEmpty())
 			{
-				if (UClass* ObjClass = UClass::TryFindTypeSlow<UClass>(ObjectType))
+				if (UClass* ObjClass = TryFindTypeFromValidatedIdentifier<UClass>(ObjectType))
 				{
 					PinType.PinSubCategoryObject = ObjClass;
 				}
-				else if (UEnum* ObjEnum = UClass::TryFindTypeSlow<UEnum>(ObjectType))
+				else if (UEnum* ObjEnum = TryFindTypeFromValidatedIdentifier<UEnum>(ObjectType))
 				{
 					PinType.PinSubCategoryObject = ObjEnum;
 				}
-				else if (UScriptStruct* ObjStruct = UClass::TryFindTypeSlow<UScriptStruct>(ObjectType))
+				else if (UScriptStruct* ObjStruct =
+					TryFindTypeFromValidatedIdentifier<UScriptStruct>(ObjectType))
 				{
 					PinType.PinSubCategoryObject = ObjStruct;
 				}
@@ -2055,7 +2160,8 @@ namespace
 				}
 				else if (ObjectType.StartsWith(TEXT("/")))
 				{
-					if (UObject* ObjFromPath = StaticLoadObject(UObject::StaticClass(), nullptr, *ObjectType))
+					if (UObject* ObjFromPath = StaticLoadObjectFromValidatedIdentifier(
+						UObject::StaticClass(), ObjectType))
 					{
 						PinType.PinSubCategoryObject = ObjFromPath;
 					}

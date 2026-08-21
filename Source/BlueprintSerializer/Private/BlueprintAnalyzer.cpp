@@ -182,6 +182,7 @@ class UK2Node_VariableSet;
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Misc/FileHelper.h"
+#include "Misc/PackageName.h"
 #include "Misc/DateTime.h"
 #include "Misc/Paths.h"
 #include "Misc/SecureHash.h"
@@ -769,11 +770,31 @@ namespace
 
     bool IsContentObjectPath(const FString& Path)
     {
-        return Path.StartsWith(TEXT("/"))
-            && !Path.EndsWith(TEXT("/"))
-            && !Path.StartsWith(TEXT("/Script/"))
-            && !Path.StartsWith(TEXT("/Temp/"))
-            && !Path.StartsWith(TEXT("/Engine/Transient"));
+        if (!Path.StartsWith(TEXT("/"))
+            || Path.Len() < 3
+            || Path.StartsWith(TEXT("//"))
+            || Path.Contains(TEXT("//"))
+            || Path.Contains(TEXT("\\"))
+            || Path.EndsWith(TEXT("/"))
+            || Path.StartsWith(TEXT("/Script/"))
+            || Path.StartsWith(TEXT("/Temp/"))
+            || Path.StartsWith(TEXT("/Engine/Transient")))
+        {
+            return false;
+        }
+
+        int32 LastSlashIndex = INDEX_NONE;
+        Path.FindLastChar(TEXT('/'), LastSlashIndex);
+        const int32 ObjectDelimiterIndex = Path.Find(
+            TEXT("."), ESearchCase::CaseSensitive, ESearchDir::FromStart,
+            FMath::Max(LastSlashIndex + 1, 0));
+
+        if (ObjectDelimiterIndex != INDEX_NONE)
+        {
+            return FPackageName::IsValidObjectPath(Path);
+        }
+
+        return FPackageName::IsValidLongPackageName(Path, true);
     }
 
     bool IsValidMountPointRoot(const FString& Root)
