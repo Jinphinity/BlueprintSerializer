@@ -1,0 +1,85 @@
+{
+  "schema": "blueprintserializer-validate-specs-regression-receipt-v2",
+  "validatorVersion": "2.0.0",
+  "generatedAtUtc": "2026-08-21T12:21:24.517263+00:00",
+  "scope": {
+    "staticValidatorRegression": true,
+    "blueprintSerializerCppChanged": false,
+    "unrealLaunched": false,
+    "blueprintCompileValidated": false,
+    "editorRoundtripValidated": false,
+    "pieRuntimeValidated": false,
+    "multiplayerValidated": false
+  },
+  "summary": {
+    "tests": 14,
+    "passed": 14,
+    "failed": 0,
+    "skipped": 0,
+    "result": "PASS"
+  },
+  "cases": [
+    "test_validate_specs.ValidateSpecsV2RegressionTests.test_branch_coverage_uses_source_markdown",
+    "test_validate_specs.ValidateSpecsV2RegressionTests.test_cli_fails_when_a_spec_has_no_exact_pair",
+    "test_validate_specs.ValidateSpecsV2RegressionTests.test_cli_report_distinguishes_static_pass_from_unexecuted_runtime",
+    "test_validate_specs.ValidateSpecsV2RegressionTests.test_duplicate_exact_candidates_are_rejected_as_ambiguous",
+    "test_validate_specs.ValidateSpecsV2RegressionTests.test_exact_metadata_pair_avoids_abstract_prefix_collision",
+    "test_validate_specs.ValidateSpecsV2RegressionTests.test_ir_notes_text_is_populated",
+    "test_validate_specs.ValidateSpecsV2RegressionTests.test_message_bearing_compiler_diagnostic_requires_guid_visibility",
+    "test_validate_specs.ValidateSpecsV2RegressionTests.test_missing_relative_link_is_visible",
+    "test_validate_specs.ValidateSpecsV2RegressionTests.test_pipe_tables_keep_code_span_and_escaped_pipes",
+    "test_validate_specs.ValidateSpecsV2RegressionTests.test_prefix_only_candidate_is_not_accepted",
+    "test_validate_specs.ValidateSpecsV2RegressionTests.test_relative_links_decode_spaces_and_ignore_code_or_external_urls",
+    "test_validate_specs.ValidateSpecsV2RegressionTests.test_unsupported_and_partial_node_types_are_exactly_disclosed",
+    "test_validate_specs.ValidateSpecsV2RegressionTests.test_utf16_json_loading",
+    "test_validate_specs.ValidateSpecsV2RegressionTests.test_validate_one_rejects_mismatched_metadata"
+  ],
+  "failures": [],
+  "artifacts": [
+    {
+      "path": "Scripts/validate_specs.py",
+      "bytes": 41664,
+      "sha256": "04CDB31DA50F400D46D2469DF35A911830C9A2267094A1158462F59A438D60BC"
+    },
+    {
+      "path": "Tests/ValidateSpecs/test_validate_specs.py",
+      "bytes": 9500,
+      "sha256": "824FFBC84DF09791699490859BC31ADB7475E60431C11EB26E6C4E0A4261E5B2"
+    },
+    {
+      "path": "Tests/ValidateSpecs/run_regressions.py",
+      "bytes": 4433,
+      "sha256": "9837095DB4C05EC9DDACECB7C5A7681061B9F7AACC94C55F770132461DE3DC3D"
+    },
+    {
+      "path": "Tests/ValidateSpecs/fixtures/exports/BP_SLZR_Blueprint_BP_Inventory_Container_11111111_20260821_000000.json",
+      "bytes": 611,
+      "sha256": "B35AA1B6622F2632721169DDEB51201F2580456CD8EF2959973F009123A31F71"
+    },
+    {
+      "path": "Tests/ValidateSpecs/fixtures/exports/BP_SLZR_Blueprint_BP_Inventory_Container_Abstract_22222222_20260821_000001.json",
+      "bytes": 504,
+      "sha256": "3428ACAC6678ADBB0C52926632F374E2197AF9800ACCFAB33768BABF061FA810"
+    },
+    {
+      "path": "Tests/ValidateSpecs/fixtures/exports/BP_SLZR_Blueprint_BP_TableLinks_33333333_20260821_000002.json",
+      "bytes": 2424,
+      "sha256": "E4914E3786CCA975F3CB3DCFE5E686926DDF60A9A519FB9D34C714100F576418"
+    },
+    {
+      "path": "Tests/ValidateSpecs/fixtures/specs/BP_Inventory_Container.md",
+      "bytes": 285,
+      "sha256": "1AB1631DBC232600A9B61169D5D62B9CFA45BC0D882B8A911AF615DB123E43BB"
+    },
+    {
+      "path": "Tests/ValidateSpecs/fixtures/specs/BP_TableLinks.md",
+      "bytes": 1211,
+      "sha256": "73D623D4C54D97C152218E655D8E09D1C94AFF2A5BC42E592335F155AEC4FBEF"
+    },
+    {
+      "path": "Tests/ValidateSpecs/fixtures/specs/linked/evidence file.md",
+      "bytes": 79,
+      "sha256": "06971A0C771F2F5E3A19559F572397ADD5CC0FEB3240333702E3E3A772D0C2E0"
+    }
+  ]
+}

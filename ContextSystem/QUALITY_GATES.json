@@ -1,6 +1,6 @@
 {
-  "schemaVersion": "1.2",
-  "description": "Quality gates for PRIME DIRECTIVE Phase 2 spec validation. Every spec must pass all gates to be considered reconstruction-complete. The self_improvement_rules section defines the MANDATORY three-loop autonomous system that any AI must execute: LOOP A (extraction regression), LOOP B (spec quality), LOOP C (meta-improvement).",
+  "schemaVersion": "1.3",
+  "description": "Quality gates for PRIME DIRECTIVE Phase 2 static spec validation. validate_specs.py executes L1-L3 only; its STRUCTURAL_PASS is not reconstruction roundtrip, Blueprint compilation, PIE/runtime, multiplayer, persistence, or C++ implementation proof. The self_improvement_rules section defines the MANDATORY three-loop autonomous system that any AI must execute: LOOP A (extraction regression), LOOP B (spec quality), LOOP C (meta-improvement).",
   "gates": {
     "L1_structural": {
       "description": "Every IR field has a spec counterpart",
@@ -11,13 +11,15 @@
         "Every implementedInterface is mentioned in spec",
         "Every classDefaultValueDelta property appears in CDO Overrides section",
         "Every dependencyClosure.moduleNames appears in Dependencies section",
-        "compilerIRFallback.hasUnsupportedNodes status noted in IR Notes",
+        "Every exact unsupportedNodeTypes and partiallySupportedNodeTypes value is classified in IR Notes",
+        "Every message-bearing node compiler diagnostic is disclosed by node GUID",
+        "Each spec has exactly one JSON whose serialized blueprintName equals the spec stem",
         "Identity section exists with Path, Parent, Generated Class (## Identity heading OR **Path:**/**Parent:** bold fields)",
         "Purpose section exists"
       ],
       "required": true,
       "error_threshold": 0,
-      "notes": "validate_specs.py implements these checks. UserConstructionScript is excluded from mandatory L1 check — include in spec only when it has authored logic. Identity accepted as ## Identity heading OR **Path:** + **Parent:** bold fields."
+      "notes": "validate_specs.py v2 implements these static checks. UserConstructionScript is excluded from mandatory L1 check — include in spec only when it has authored logic. Identity accepted as ## Identity heading OR **Path:** + **Parent:** bold fields. Relative Markdown links are resolved with URL-decoding and reported as warnings when missing."
     },
     "L2_accuracy": {
       "description": "Types, defaults, flags match the IR exactly",
@@ -54,7 +56,7 @@
         "AI reconstruction identifies same C++ dependencies"
       ],
       "required": false,
-      "notes": "L4 is AI-driven and expensive. Run selectively on high-priority specs or after L1-L3 pass."
+      "notes": "L4 is external and is never implied by validate_specs.py STRUCTURAL_PASS. Run it selectively on high-priority specs after L1-L3 pass."
     },
     "L5_convergence": {
       "description": "C++ from spec matches C++ from direct IR conversion",

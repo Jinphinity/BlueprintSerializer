@@ -310,7 +310,9 @@ WHAT THE LOGIC DOES, not what nodes exist.
 - `bIsIntermediateNode: "True"` nodes — compiler-generated. Include only if they contain
   meaningful routing (like ExecuteUbergraph calls).
 - Comment bubble fields (`bCommentBubbleVisible`, etc.)
-- `DeprecatedPins`, `ErrorMsg`, `ErrorType`, `NodeUpgradeMessage`
+- Empty/default `ErrorMsg`, `ErrorType`, and `NodeUpgradeMessage` reflection
+  noise. Preserve every **nonempty** error/upgrade message with its graph and
+  node GUID; export success is not a compile-clean claim.
 
 ### 8. Dependency Closure — Always Include
 
@@ -328,6 +330,10 @@ understanding what systems this Blueprint touches.
 - `compilerIRFallback.hasUnsupportedNodes` — if true, note which node types are
   unhandled. This means the spec will have gaps for those nodes.
 - `coverage.unsupportedNodeTypes` — list them
+- `coverage.partiallySupportedNodeTypes` — list them separately as partial,
+  never as fully reconstructed
+- message-bearing node compiler diagnostics — list every site by graph/GUID and
+  preserve the message
 
 If `hasUnsupportedNodes` is false (the common case in a mature extraction),
 you can note "Full IR coverage — no unsupported nodes."

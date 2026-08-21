@@ -308,10 +308,13 @@ Structs and enums defined within this Blueprint.
 | `hasUnsupportedNodes` | bool | **True = some nodes couldn't be fully extracted** |
 | `unsupportedNodeTypes` | string[] | List of unhandled node types |
 | `unsupportedNodeTypeCount` | int | Count of unhandled types |
+| `partiallySupportedNodeTypes` | string[] | Node types whose serializer projection is incomplete |
+| `partiallySupportedNodeTypeCount` | int | Count of partially supported types |
 | `hasBytecodeFallback` | bool | Whether bytecode fallback was used |
 
-**If `hasUnsupportedNodes` is true:** The spec should note which node types are unhandled.
-This means the graph pseudo-code will have gaps for those specific nodes.
+**If either support list is nonempty:** IR Notes must name each exact type and
+distinguish unsupported from partially supported behavior. This means the graph
+pseudo-code can have gaps for those specific nodes.
 
 ---
 
@@ -323,6 +326,18 @@ This means the graph pseudo-code will have gaps for those specific nodes.
 | `nodeTypeCounts` | object | Node type → count map |
 | `unsupportedNodeTypes` | string[] | Types not fully handled |
 | `partiallySupportedNodeTypes` | string[] | Types with partial handling |
+
+## Node compiler diagnostics
+
+Structured node records can expose `errorType`, `errorMsg`, and
+`nodeUpgradeMessage` (plus reflected `ErrorType`, `ErrorMsg`, and
+`NodeUpgradeMessage` values under `nodeProperties`). A nonempty error or upgrade
+message is a diagnostic site and must be retained by node GUID in the spec.
+
+Do not equate every nonzero reflected `ErrorType` marker with a message-bearing
+diagnostic. Some donor exports contain hundreds of nonzero markers but only a
+small number of nodes with actual messages. `validate_specs.py` reports those
+counts separately.
 
 ---
 

@@ -659,12 +659,19 @@ meta-improvements or SYNTHESIZE phase).
 ```
 validate_specs.py [spec_dir] [export_dir] [--fix-list path] [--report path]
 
-Exit code 0: all specs pass
-Exit code 1: one or more specs fail
+Exit code 0: every spec has one exact serialized-name JSON pair and passes the
+implemented static L1-L3 checks
+Exit code 1: one or more specs fail static checks, have no exact pair, or have
+ambiguous duplicate exact pairs
 
 Output: _VALIDATION_FAILURES.md with summary table + per-BP top error
 JSON report: optional, contains per-BP per-field diagnostic detail
 ```
+
+The v2 result token is `STRUCTURAL_PASS` or `STRUCTURAL_FAIL`. It is never a
+claim of Blueprint compilation, editor roundtrip, PIE/runtime behavior,
+multiplayer correctness, persistence correctness, or C++ implementation. Those
+surfaces remain explicitly `false` in the JSON report until separate tools run.
 
 **Error severity:**
 - `error` → causes FAIL, must fix for L1/L2/L3 compliance
@@ -676,6 +683,9 @@ JSON report: optional, contains per-BP per-field diagnostic detail
 - CDO section absent when delta non-empty
 - Missing Identity section (## Identity heading OR **Path:** + **Parent:** bold fields)
 - IR has unsupported nodes but spec doesn't mention them
+- Exact unsupported and partially supported node types missing from IR Notes
+- Message-bearing node compiler diagnostic site missing by node GUID
+- Missing or ambiguous exact `blueprintName` JSON pairing
 
 **Key L1 checks (warnings):**
 - Individual CDO property missing from CDO table

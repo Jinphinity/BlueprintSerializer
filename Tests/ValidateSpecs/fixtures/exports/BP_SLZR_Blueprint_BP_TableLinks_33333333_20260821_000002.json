@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "3.1",
+  "blueprintName": "BP_TableLinks",
+  "blueprintPath": "/Game/Test/BP_TableLinks.BP_TableLinks",
+  "detailedVariables": [
+    {"name": "Mode|State", "isReplicated": false},
+    {"name": "Pipe|Name", "isReplicated": false}
+  ],
+  "detailedFunctions": [
+    {"name": "Resolve|State", "isNetServer": false, "isNetClient": false, "isNetMulticast": false}
+  ],
+  "detailedComponents": [],
+  "classDefaultValueDelta": {},
+  "dependencyClosure": {"moduleNames": []},
+  "unsupportedNodeTypes": ["K2Node_UnsupportedFixture"],
+  "partiallySupportedNodeTypes": ["K2Node_PartialFixture"],
+  "compilerIRFallback": {
+    "hasUnsupportedNodes": true,
+    "unsupportedNodeTypeCount": 1,
+    "unsupportedNodeTypes": ["K2Node_UnsupportedFixture"],
+    "partiallySupportedNodeTypeCount": 1,
+    "partiallySupportedNodeTypes": ["K2Node_PartialFixture"]
+  },
+  "coverage": {
+    "totalNodeCount": 8,
+    "unsupportedNodeTypes": ["K2Node_UnsupportedFixture"],
+    "partiallySupportedNodeTypes": ["K2Node_PartialFixture"]
+  },
+  "structuredGraphs": [
+    {
+      "name": "EventGraph",
+      "graphType": "Ubergraph",
+      "nodes": [
+        {
+          "nodeGuid": "EVENT0000000000000000000000000001",
+          "nodeType": "K2Node_Event",
+          "title": "Event BeginPlay",
+          "nodeProperties": {"meta.eventName": "BeginPlay", "bIsIntermediateNode": "False"}
+        },
+        {"nodeGuid": "BRANCH00000000000000000000000001", "nodeType": "K2Node_IfThenElse", "nodeProperties": {}},
+        {"nodeGuid": "BRANCH00000000000000000000000002", "nodeType": "K2Node_IfThenElse", "nodeProperties": {}},
+        {"nodeGuid": "BRANCH00000000000000000000000003", "nodeType": "K2Node_IfThenElse", "nodeProperties": {}},
+        {"nodeGuid": "BRANCH00000000000000000000000004", "nodeType": "K2Node_IfThenElse", "nodeProperties": {}},
+        {"nodeGuid": "BRANCH00000000000000000000000005", "nodeType": "K2Node_IfThenElse", "nodeProperties": {}},
+        {"nodeGuid": "BRANCH00000000000000000000000006", "nodeType": "K2Node_IfThenElse", "nodeProperties": {}},
+        {
+          "nodeGuid": "DIAGNOSTIC000000000000000000000001",
+          "nodeType": "K2Node_CallFunction",
+          "errorType": 4,
+          "errorMsg": "Fixture warning",
+          "nodeProperties": {"ErrorType": "4", "ErrorMsg": "Fixture warning"}
+        }
+      ],
+      "flows": {"execution": [], "data": []}
+    }
+  ],
+  "totalNodeCount": 8
+}

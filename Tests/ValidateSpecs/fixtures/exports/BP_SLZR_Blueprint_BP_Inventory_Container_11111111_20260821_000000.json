@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "3.1",
+  "blueprintName": "BP_Inventory_Container",
+  "blueprintPath": "/Game/Test/BP_Inventory_Container.BP_Inventory_Container",
+  "detailedVariables": [],
+  "detailedFunctions": [],
+  "detailedComponents": [],
+  "classDefaultValueDelta": {},
+  "dependencyClosure": {"moduleNames": []},
+  "compilerIRFallback": {
+    "hasUnsupportedNodes": false,
+    "unsupportedNodeTypes": [],
+    "partiallySupportedNodeTypes": []
+  },
+  "coverage": {
+    "totalNodeCount": 0,
+    "unsupportedNodeTypes": [],
+    "partiallySupportedNodeTypes": []
+  },
+  "structuredGraphs": [],
+  "totalNodeCount": 0
+}
