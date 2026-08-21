@@ -1,0 +1,303 @@
+{
+  "schema": "blueprintserializer-ue58-gap-regression-fixture-v1",
+  "generatedAtUtc": "2026-08-21T13:31:48Z",
+  "serializerCommit": "da383209e7ec73ec36d35fda71a49e205701850e",
+  "engineVersion": "5.8.0",
+  "cases": {
+    "recursiveCollapsedAndSpecialNodes": {
+      "blueprintPath": "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager",
+      "exportSha256": "3693597471D5E3A00A901D9332B78F9B826E1263BB85AEC5945B765D1227E963",
+      "graphCount": 71,
+      "collapsedGraphCount": 16,
+      "collapsedGraphPaths": [
+        "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager:EventGraph.K2Node_Composite_0.Beginplay",
+        "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager:EventGraph.K2Node_Composite_0.Beginplay.K2Node_Composite_2.Level Streaming / World Partition",
+        "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager:EventGraph.K2Node_Composite_0.Beginplay.K2Node_Composite_2.Level Streaming / World Partition.K2Node_Composite_1.Load Actors From Level",
+        "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager:EventGraph.K2Node_Composite_0.Beginplay.K2Node_Composite_3.Initialize Saving",
+        "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager:EventGraph.K2Node_Composite_2.Player Save",
+        "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager:EventGraph.K2Node_Composite_3.AutoSave",
+        "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager:EventGraph.K2Node_Composite_1.Create New Save ",
+        "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager:EventGraph.K2Node_Composite_4.Async Save Game To Slot",
+        "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager:Update Slot Info.K2Node_Composite_0.Update Save",
+        "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager:Update Slot Info.K2Node_Composite_0.Update Save.K2Node_Composite_0.Get Current Slot",
+        "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager:Update Slot Info.K2Node_Composite_1.Remove Excessive Autosave Slots",
+        "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager:Update Slot Info.K2Node_Composite_2.Cache Level Name",
+        "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager:Save Game.K2Node_Composite_0.Check Save Prerequisites",
+        "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager:Capture And Save Screenshot.K2Node_Composite_0.Create Scene Capture",
+        "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager:On Player Login.K2Node_Composite_0.Was Last Save Saved In A Different Level",
+        "/Game/Hyper/Save/Blueprints/Components/AC_GM_SaveManager.AC_GM_SaveManager:Load Saved Level Data.K2Node_Composite_0.Load Actors From All Levels"
+      ],
+      "unsupportedNodeTypes": [],
+      "partiallySupportedNodeTypes": [],
+      "addComponentByClass": {
+        "nodeGuid": "FC9708524E206617617DAE9166A00531",
+        "metadata": {
+          "meta.addComponentClassIsDynamic": "false",
+          "meta.addComponentClassIsSceneComponent": "true",
+          "meta.addComponentClassName": "SceneCaptureComponent2D",
+          "meta.addComponentClassPath": "/Script/Engine.SceneCaptureComponent2D",
+          "meta.addComponentClassPinId": "7F50A0FF493C060CCABC81BF6A65C1A8",
+          "meta.addComponentClassPinIdType": "class (/Script/Engine.ActorComponent)",
+          "meta.addComponentExecutePinId": "44315287497D32D7AA0561886146F63A",
+          "meta.addComponentExecutePinIdType": "exec",
+          "meta.addComponentExpansionFunction": "/Script/Engine.Actor:AddComponentByClass",
+          "meta.addComponentExposeOnSpawnPinCount": "0",
+          "meta.addComponentFinishFunction": "/Script/Engine.Actor:FinishAddComponent",
+          "meta.addComponentHasExposeOnSpawnPins": "false",
+          "meta.addComponentManualAttachmentDefault": "false",
+          "meta.addComponentManualAttachmentPinHidden": "false",
+          "meta.addComponentManualAttachmentPinId": "EC827F19452C60C69161989125B0DA00",
+          "meta.addComponentManualAttachmentPinIdType": "bool",
+          "meta.addComponentOwnerPinId": "EC0F2B8A4DF120A1DC57428D0F004367",
+          "meta.addComponentOwnerPinIdType": "object (/Script/Engine.Actor)",
+          "meta.addComponentRelativeTransformPinHidden": "false",
+          "meta.addComponentRelativeTransformPinId": "A6C143794F8F7611C9A512A512C71DDB",
+          "meta.addComponentRelativeTransformPinIdType": "struct (/Script/CoreUObject.Transform)",
+          "meta.addComponentRelativeTransformUsesIdentityDefault": "true",
+          "meta.addComponentRequiresDeferredFinish": "false",
+          "meta.addComponentResultClass": "/Script/Engine.SceneCaptureComponent2D",
+          "meta.addComponentResultPinId": "42283EAA491C1EC59FA9858DF5627085",
+          "meta.addComponentResultPinIdType": "object (/Script/Engine.SceneCaptureComponent2D)",
+          "meta.addComponentThenPinId": "C290700348C995B3B59DD5B00622B73A",
+          "meta.addComponentThenPinIdType": "exec",
+          "meta.isAddComponentByClass": "true"
+        }
+      },
+      "mapForEach": {
+        "nodeGuid": "FF5D8E32468DA740AF7A348FEC3928BA",
+        "metadata": {
+          "meta.isMapForEach": "true",
+          "meta.mapForEachBreakPinId": "8C2F2BD6401E6511A896B18F0AF29EE1",
+          "meta.mapForEachCompletedPinId": "A49D8CF747C9A70DA8D031A6FACBACDF",
+          "meta.mapForEachExecutePinId": "5BF385BA46B91D4BE330EFA9061DE655",
+          "meta.mapForEachKeyPinId": "87FB7C5740FBCD2CE01DDAB46EDA656E",
+          "meta.mapForEachKeyPinIdType": "class (/Script/Engine.ActorComponent)",
+          "meta.mapForEachLoopBodyPinId": "A66C8D3047E66A21EA28B989D5E7C487",
+          "meta.mapForEachMapPinId": "4A465AA047BB66E09D5847B410F00B6A",
+          "meta.mapForEachMapPinIdType": "Map<class (/Script/Engine.ActorComponent),struct (/Game/Hyper/Core/Generic/Datamodel/Structures/F_ByteArray.F_ByteArray)>",
+          "meta.mapForEachValuePinId": "6DF125C74D3FF70279F7B1BDE6E17BF8",
+          "meta.mapForEachValuePinIdType": "struct (/Game/Hyper/Core/Generic/Datamodel/Structures/F_ByteArray.F_ByteArray)"
+        }
+      }
+    },
+    "enhancedInputAsyncLoadAndReplication": {
+      "blueprintPath": "/Game/FPS/Blueprints/CharacterAndClasses/BP_PlayerCharacter.BP_PlayerCharacter",
+      "exportSha256": "DB4042469AD35AB679C8E7DAB2C1EEB60DDAA88C67149155AAE8875170C3523B",
+      "graphCount": 532,
+      "nodeCount": 3927,
+      "unsupportedNodeTypes": [],
+      "partiallySupportedNodeTypes": [],
+      "getInputActionValue": [
+        {
+          "nodeGuid": "DE135285463E4791EF3BB4A4AE2FD7F4",
+          "title": "Get IA_FireWeapon",
+          "inputActionPath": "/Game/FPS/Inputs/InputActions/IA_FireWeapon.IA_FireWeapon",
+          "inputActionName": "IA_FireWeapon",
+          "valuePinId": "F8AC302C44802D578ECC41A735B2EB7B",
+          "valueType": "bool"
+        },
+        {
+          "nodeGuid": "7B49CB4747D70F88E4140A8DFC71545F",
+          "title": "Get IA_Lethal",
+          "inputActionPath": "/Game/FPS/Inputs/InputActions/IA_Lethal.IA_Lethal",
+          "inputActionName": "IA_Lethal",
+          "valuePinId": "E822D5A74FA3AE866684A78DA19F5B23",
+          "valueType": "bool"
+        },
+        {
+          "nodeGuid": "8ED5E10848A8532E7A561A973108C789",
+          "title": "Get IA_Move",
+          "inputActionPath": "/Game/FPS/Inputs/InputActions/IA_Move.IA_Move",
+          "inputActionName": "IA_Move",
+          "valuePinId": "0EB9CC12466FC0D74B7D0AACE21EED8F",
+          "valueType": "struct (/Script/CoreUObject.Vector2D)"
+        },
+        {
+          "nodeGuid": "9E8A03B34E159CDA7A41DBB951AEA169",
+          "title": "Get IA_Move",
+          "inputActionPath": "/Game/FPS/Inputs/InputActions/IA_Move.IA_Move",
+          "inputActionName": "IA_Move",
+          "valuePinId": "0EB9CC12466FC0D74B7D0AACE21EED8F",
+          "valueType": "struct (/Script/CoreUObject.Vector2D)"
+        },
+        {
+          "nodeGuid": "60F69E4E4F0C70426C913BAE0307718A",
+          "title": "Get IA_Move",
+          "inputActionPath": "/Game/FPS/Inputs/InputActions/IA_Move.IA_Move",
+          "inputActionName": "IA_Move",
+          "valuePinId": "0EB9CC12466FC0D74B7D0AACE21EED8F",
+          "valueType": "struct (/Script/CoreUObject.Vector2D)"
+        },
+        {
+          "nodeGuid": "EBCF073F4F665B79BC07628AE9750818",
+          "title": "Get IA_FireWeapon",
+          "inputActionPath": "/Game/FPS/Inputs/InputActions/IA_FireWeapon.IA_FireWeapon",
+          "inputActionName": "IA_FireWeapon",
+          "valuePinId": "F8AC302C44802D578ECC41A735B2EB7B",
+          "valueType": "bool"
+        }
+      ],
+      "loadAssetClass": [
+        {
+          "nodeGuid": "9D8EB153481A4C9EEDC9EABF26482869",
+          "title": "Async Load Class Asset",
+          "assetClassPinId": "6D011B8C4977A759F70135A018248E58",
+          "assetClassDefault": "/Game/FPS/Blueprints/Weapons/BP_AssaultRifle.BP_AssaultRifle_C",
+          "assetClassType": "softclass (/Script/CoreUObject.Object)",
+          "resultPinId": "1697891B408C1BE992729DBF837A34FA",
+          "resultType": "class (/Script/CoreUObject.Object)",
+          "completedPinId": "FEC849D24F7F54C4D3BF398262905CB7"
+        },
+        {
+          "nodeGuid": "8CC6A63A4396BE776461328E89C99803",
+          "title": "Async Load Class Asset",
+          "assetClassPinId": "6D011B8C4977A759F70135A018248E58",
+          "assetClassDefault": "/Game/FPS/Blueprints/Attachments/Optic/Bp_RedDot.Bp_RedDot_C",
+          "assetClassType": "softclass (/Script/CoreUObject.Object)",
+          "resultPinId": "1697891B408C1BE992729DBF837A34FA",
+          "resultType": "class (/Script/CoreUObject.Object)",
+          "completedPinId": "FEC849D24F7F54C4D3BF398262905CB7"
+        },
+        {
+          "nodeGuid": "C3E81C3D4DCDF133984F16AD0F854E54",
+          "title": "Async Load Class Asset",
+          "assetClassPinId": "6D011B8C4977A759F70135A018248E58",
+          "assetClassDefault": "/Game/FPS/Blueprints/Weapons/BP_SMG.BP_SMG_C",
+          "assetClassType": "softclass (/Script/CoreUObject.Object)",
+          "resultPinId": "1697891B408C1BE992729DBF837A34FA",
+          "resultType": "class (/Script/CoreUObject.Object)",
+          "completedPinId": "FEC849D24F7F54C4D3BF398262905CB7"
+        },
+        {
+          "nodeGuid": "774205A943A9A9E3A491A0A2EF0FDA49",
+          "title": "Async Load Class Asset",
+          "assetClassPinId": "6D011B8C4977A759F70135A018248E58",
+          "assetClassDefault": "/Game/FPS/Blueprints/Attachments/Optic/Bp_RedDot.Bp_RedDot_C",
+          "assetClassType": "softclass (/Script/CoreUObject.Object)",
+          "resultPinId": "1697891B408C1BE992729DBF837A34FA",
+          "resultType": "class (/Script/CoreUObject.Object)",
+          "completedPinId": "FEC849D24F7F54C4D3BF398262905CB7"
+        },
+        {
+          "nodeGuid": "6431EB5543B9A6ADE8C953A8DCE414A2",
+          "title": "Async Load Class Asset",
+          "assetClassPinId": "6D011B8C4977A759F70135A018248E58",
+          "assetClassDefault": "/Game/FPS/Blueprints/Attachments/Muzzle/BP_Suppressor.BP_Suppressor_C",
+          "assetClassType": "softclass (/Script/CoreUObject.Object)",
+          "resultPinId": "1697891B408C1BE992729DBF837A34FA",
+          "resultType": "class (/Script/CoreUObject.Object)",
+          "completedPinId": "FEC849D24F7F54C4D3BF398262905CB7"
+        }
+      ],
+      "rawDoubleSlashCommentPreserved": {
+        "nodeGuid": "0333B90B441A28BE34869FACD4180973",
+        "comment": "On_Death //Server Runs this Event"
+      },
+      "replication": {
+        "detailedVariableCount": 72,
+        "compiledPropertyCount": 72,
+        "compiledNetCount": 6,
+        "compiledRepNotifyCount": 2,
+        "metadataContradictionCount": 0
+      }
+    },
+    "umgLayout": {
+      "blueprintPath": "/Game/HorrorEngine/Blueprints/Widgets/MainHUD/Reading_WB.Reading_WB",
+      "exportSha256": "72AC519E802B8198A656CEB6715DF9B896ECD2716213EDFD103D503F70A19B8F",
+      "isWidgetBlueprint": true,
+      "hasSourceWidgetTree": true,
+      "rootWidgetName": "CanvasPanel_0",
+      "widgets": [
+        {
+          "name": "CanvasPanel_0",
+          "classPath": "/Script/UMG.CanvasPanel",
+          "parentName": null,
+          "childIndex": -1,
+          "depth": 0,
+          "slotClassPath": null,
+          "slotProperties": {},
+          "visibility": "SelfHitTestInvisible",
+          "text": null,
+          "widgetStyle": null,
+          "brush": null,
+          "referencedObjectPaths": [
+            "/Game/HorrorEngine/Blueprints/Widgets/MainHUD/Reading_WB.Reading_WB"
+          ]
+        },
+        {
+          "name": "Word",
+          "classPath": "/Script/UMG.CanvasPanel",
+          "parentName": "CanvasPanel_0",
+          "childIndex": 0,
+          "depth": 1,
+          "slotClassPath": "/Script/UMG.CanvasPanelSlot",
+          "slotProperties": {
+            "bAutoSize": "False",
+            "Content": "/Script/UMG.CanvasPanel'/Game/HorrorEngine/Blueprints/Widgets/MainHUD/Reading_WB.Reading_WB:WidgetTree.Word'",
+            "LayoutData": "(Offsets=(Right=800.000000,Bottom=1000.000000),Anchors=(Minimum=(X=0.000000,Y=0.000000),Maximum=(X=0.000000,Y=0.000000)),Alignment=(X=0.000000,Y=0.000000))",
+            "Parent": "/Script/UMG.CanvasPanel'/Game/HorrorEngine/Blueprints/Widgets/MainHUD/Reading_WB.Reading_WB:WidgetTree.CanvasPanel_0'",
+            "ZOrder": "0"
+          },
+          "visibility": "HitTestInvisible",
+          "text": null,
+          "widgetStyle": null,
+          "brush": null,
+          "referencedObjectPaths": [
+            "/Game/HorrorEngine/Blueprints/Widgets/MainHUD/Reading_WB.Reading_WB"
+          ]
+        },
+        {
+          "name": "Text",
+          "classPath": "/Script/UMG.MultiLineEditableText",
+          "parentName": "Word",
+          "childIndex": 1,
+          "depth": 2,
+          "slotClassPath": "/Script/UMG.CanvasPanelSlot",
+          "slotProperties": {
+            "bAutoSize": "True",
+            "Content": "/Script/UMG.MultiLineEditableText'/Game/HorrorEngine/Blueprints/Widgets/MainHUD/Reading_WB.Reading_WB:WidgetTree.Text'",
+            "LayoutData": "(Offsets=(Left=75.000000,Top=75.000000,Right=75.000000,Bottom=75.000000),Anchors=(Minimum=(X=0.000000,Y=0.000000),Maximum=(X=1.000000,Y=1.000000)),Alignment=(X=0.000000,Y=0.000000))",
+            "Parent": "/Script/UMG.CanvasPanel'/Game/HorrorEngine/Blueprints/Widgets/MainHUD/Reading_WB.Reading_WB:WidgetTree.Word'",
+            "ZOrder": "0"
+          },
+          "visibility": "HitTestInvisible",
+          "text": "NSLOCTEXT(\"[7CE95F614198BE0D786794B4797C4E7D]\", \"8610C90D40FE8640E4D7049FD4508D97\", \"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Enim nunc faucibus a pellentesque sit amet porttitor eget. Convallis tellus id interdum velit laoreet. Faucibus vitae aliquet nec ullamcorper sit amet risus nullam. Nisl rhoncus mattis rhoncus urna neque viverra justo nec ultrices. Sagittis eu volutpat odio facilisis mauris sit. Tempor id eu nisl nunc mi. Nunc congue nisi vitae suscipit tellus mauris. Leo urna molestie at elementum. Eu mi bibendum neque egestas.\\r\\n\\r\\nAt augue eget arcu dictum. Tellus id interdum velit laoreet id. Semper eget duis at tellus at urna. Lacus sed viverra tellus in hac. Vel fringilla est ullamcorper eget nulla facilisi etiam dignissim diam. Ut ornare lectus sit amet est placerat in egestas. Ante in nibh mauris cursus mattis molestie. In hendrerit gravida rutrum quisque non tellus orci ac auctor. Placerat orci nulla pellentesque dignissim. Arcu dui vivamus arcu felis bibendum ut tristique et. Suspendisse potenti nullam ac tortor vitae purus faucibus. At tellus at urna condimentum mattis pellentesque id nibh tortor. Pulvinar sapien et ligula ullamcorper malesuada proin libero nunc. Massa vitae tortor condimentum lacinia quis. Consequat id porta nibh venenatis cras sed felis eget.\\r\\n\\r\\nLacus vel facilisis volutpat est velit egestas. Id faucibus nisl tincidunt eget nullam. Tortor at risus viverra adipiscing. Morbi tincidunt augue interdum velit euismod in. In pellentesque massa placerat duis ultricies lacus sed turpis. In fermentum et sollicitudin ac orci phasellus egestas tellus. Nisl pretium fusce id velit. Non tellus orci ac auctor augue mauris augue neque gravida. Felis eget velit aliquet sagittis id. Arcu non odio euismod lacinia at quis risus sed. Elementum curabitur vitae nunc sed velit dignissim. Ut faucibus pulvinar elementum integer enim neque volutpat ac tincidunt. Eu nisl nunc mi ipsum faucibus. Proin fermentum leo vel orci porta non pulvinar neque laoreet. Vel pretium lectus quam id leo in vitae. Velit ut tortor pretium viverra. Mauris in aliquam sem fringilla ut morbi tincidunt. Est placerat in egestas erat imperdiet sed. Non curabitur gravida arcu ac tortor dignissim.\\r\\n\\r\\nConsectetur lorem donec massa sapien. Facilisis volutpat est velit egestas dui id ornare. Tristique senectus et netus et malesuada fames ac turpis egestas. Erat nam at lectus urna duis convallis convallis tellus id. Tincidunt tortor aliquam nulla facilisi cras fermentum odio eu. Urna neque viverra justo nec ultrices dui sapien eget mi. Sagittis aliquam malesuada bibendum arcu. Congue mauris rhoncus aenean vel elit. Adipiscing elit pellentesque habitant morbi tristique. Amet luctus venenatis lectus magna fringilla urna porttitor rhoncus. Pulvinar sapien et ligula ullamcorper malesuada proin libero. Sem integer vitae justo eget magna fermentum iaculis. Etiam dignissim diam quis enim lobortis scelerisque fermentum dui. Faucibus scelerisque eleifend donec pretium vulputate sapien. Aliquet sagittis id consectetur purus ut faucibus pulvinar elementum.\\r\\n\\r\\nIpsum faucibus vitae aliquet nec. Aliquet bibendum enim facilisis gravida neque convallis. Commodo nulla facilisi nullam vehicula ipsum a arcu cursus vitae. Vivamus arcu felis bibendum ut. Vitae aliquet nec ullamcorper sit amet risus. Eget velit aliquet sagittis id consectetur purus ut faucibus. Nunc sed id semper risus in hendrerit gravida rutrum. \")",
+          "widgetStyle": "(Font=(FontObject=\"/Script/Engine.Font'/Engine/EngineFonts/Roboto.Roboto'\",OutlineSettings=(OutlineColor=(R=0.000000,G=0.000000,B=0.000000,A=1.000000)),TypefaceFontName=\"Regular\",Size=11.000000,MonospacedWidth=1.000000),ColorAndOpacity=(SpecifiedColor=(R=0.800000,G=0.800000,B=0.800000,A=1.000000)),ShadowOffset=(X=0.000000,Y=0.000000),ShadowColorAndOpacity=(R=0.000000,G=0.000000,B=0.000000,A=1.000000),SelectedBackgroundColor=(SpecifiedColor=(R=1.000000,G=0.000000,B=1.000000,A=1.000000),ColorUseRule=UseColor_Foreground),HighlightColor=(SpecifiedColor=(R=0.020000,G=0.300000,B=0.000000,A=1.000000)),HighlightShape=(TintColor=(SpecifiedColor=(R=1.000000,G=1.000000,B=1.000000,A=1.000000)),DrawAs=Box,ImageType=FullColor,ImageSize=(X=0.000000,Y=0.000000),Margin=(Left=0.375000,Top=0.375000,Right=0.375000,Bottom=0.375000),OutlineSettings=(CornerRadii=(X=0.000000,Y=0.000000,Z=0.000000,W=0.000000),Color=(SpecifiedColor=(R=0.000000,G=0.000000,B=0.000000,A=0.000000)),RoundingType=HalfHeightRadius),UVRegion=(Min=(X=0.000000,Y=0.000000),Max=(X=0.000000,Y=0.000000),bIsValid=False),ResourceName=\"../../../Engine/Content/Slate/Common/TextBlockHighlightShape.png\"),StrikeBrush=(TintColor=(SpecifiedColor=(R=1.000000,G=1.000000,B=1.000000,A=1.000000)),DrawAs=Image,ImageSize=(X=32.000000,Y=32.000000),Margin=(),OutlineSettings=(CornerRadii=(X=0.000000,Y=0.000000,Z=0.000000,W=0.000000),Color=(SpecifiedColor=(R=0.000000,G=0.000000,B=0.000000,A=0.000000)),RoundingType=HalfHeightRadius),UVRegion=(Min=(X=0.000000,Y=0.000000),Max=(X=0.000000,Y=0.000000),bIsValid=False)),UnderlineBrush=(TintColor=(SpecifiedColor=(R=1.000000,G=1.000000,B=1.000000,A=1.000000)),DrawAs=Image,ImageSize=(X=32.000000,Y=32.000000),Margin=(),OutlineSettings=(CornerRadii=(X=0.000000,Y=0.000000,Z=0.000000,W=0.000000),Color=(SpecifiedColor=(R=0.000000,G=0.000000,B=0.000000,A=0.000000)),RoundingType=HalfHeightRadius),UVRegion=(Min=(X=0.000000,Y=0.000000),Max=(X=0.000000,Y=0.000000),bIsValid=False)))",
+          "brush": null,
+          "referencedObjectPaths": [
+            "/Engine/EngineFonts/Roboto.Roboto",
+            "/Game/HorrorEngine/Blueprints/Widgets/MainHUD/Reading_WB.Reading_WB"
+          ]
+        },
+        {
+          "name": "TextBG",
+          "classPath": "/Script/UMG.Image",
+          "parentName": "Word",
+          "childIndex": 0,
+          "depth": 2,
+          "slotClassPath": "/Script/UMG.CanvasPanelSlot",
+          "slotProperties": {
+            "bAutoSize": "False",
+            "Content": "/Script/UMG.Image'/Game/HorrorEngine/Blueprints/Widgets/MainHUD/Reading_WB.Reading_WB:WidgetTree.TextBG'",
+            "LayoutData": "(Offsets=(Left=50.000000,Top=50.000000,Right=50.000000,Bottom=50.000000),Anchors=(Minimum=(X=0.000000,Y=0.000000),Maximum=(X=1.000000,Y=1.000000)),Alignment=(X=0.500000,Y=0.500000))",
+            "Parent": "/Script/UMG.CanvasPanel'/Game/HorrorEngine/Blueprints/Widgets/MainHUD/Reading_WB.Reading_WB:WidgetTree.Word'",
+            "ZOrder": "0"
+          },
+          "visibility": "HitTestInvisible",
+          "text": null,
+          "widgetStyle": null,
+          "brush": "(TintColor=(SpecifiedColor=(R=1.000000,G=1.000000,B=1.000000,A=1.000000)),DrawAs=Image,ImageSize=(X=1920.000000,Y=100.000000),Margin=(),OutlineSettings=(CornerRadii=(X=0.000000,Y=0.000000,Z=0.000000,W=0.000000),Color=(SpecifiedColor=(R=0.000000,G=0.000000,B=0.000000,A=0.000000)),RoundingType=HalfHeightRadius),UVRegion=(Min=(X=0.000000,Y=0.000000),Max=(X=0.000000,Y=0.000000),bIsValid=False))",
+          "referencedObjectPaths": [
+            "/Game/HorrorEngine/Blueprints/Widgets/MainHUD/Reading_WB.Reading_WB"
+          ]
+        }
+      ],
+      "bindings": [],
+      "animations": [],
+      "namedSlotBindings": [],
+      "generatedNamedSlots": [],
+      "unsupportedNodeTypes": [],
+      "partiallySupportedNodeTypes": []
+    }
+  }
+}
