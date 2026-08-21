@@ -3,6 +3,11 @@
 > This document describes every field in the JSON files produced by BlueprintSerializer.
 > Use this to understand the data you are reading when producing specs for a UE project.
 
+Current analyzer schema: **1.7**. Schema 1.7 makes the legacy flat `graphNodes`
+surface cover the same reachable node set as `structuredGraphs`, including recursive
+collapsed-graph bodies, and replaces the misleading `bytecodeHash` field with an
+explicitly noncanonical raw-memory diagnostic.
+
 ---
 
 ## File Naming
@@ -137,8 +142,19 @@ Each entry represents a Blueprint function (UFUNCTION equivalent).
 | `detailedLocalVariables` | object[] | Structured: varName, typeCategory, etc. |
 | **Compilation** | | |
 | `bytecodeSize` | int | Compiled bytecode size (correlates with function complexity) |
-| `bytecodeHash` | string | Bytecode hash (change detection) |
+| `rawInMemoryBytecodeDiagnostic` | object | Noncanonical diagnostic over the currently loaded `UFunction::Script` buffer; never change/equivalence proof |
 | `declarationSpecifiers` | string[] | UFUNCTION specifiers: BlueprintCallable, BlueprintEvent, etc. |
+
+### Raw in-memory bytecode diagnostic
+
+`rawInMemoryBytecodeDiagnostic` contains `value`, `algorithm`, `source`,
+`stabilityScope`, `canonical`, and `semanticEquivalenceProof`. The current algorithm
+is MD5 over the loaded `UFunction::Script` bytes. Those bytes embed process-resolved
+FName IDs and UObject/FField addresses, so the value can change across loads,
+processes, recompiles, reconstructed assets, machines, and engine versions even when
+the authored graph is unchanged. Consumers **must not** use it for source identity,
+semantic comparison, deterministic receipts, milestone gates, or round-trip success.
+Use `structuredGraphs` and its typed properties, pins, and flows for canonical evidence.
 
 ---
 

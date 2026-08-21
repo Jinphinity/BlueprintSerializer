@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.7",
+  "totalNodeCount": 3,
+  "graphNodes": [
+    "{\"nodeType\":\"K2Node_CustomEvent\",\"nodeGuid\":\"11111111111111111111111111111111\"}",
+    "{\"nodeType\":\"K2Node_Composite\",\"nodeGuid\":\"22222222222222222222222222222222\"}",
+    "{\"nodeType\":\"K2Node_Tunnel\",\"nodeGuid\":\"33333333333333333333333333333333\"}"
+  ],
+  "structuredGraphs": [
+    {
+      "name": "EventGraph",
+      "graphType": "Ubergraph",
+      "nodes": [
+        {"nodeType": "K2Node_CustomEvent", "nodeGuid": "11111111111111111111111111111111"},
+        {"nodeType": "K2Node_Composite", "nodeGuid": "22222222222222222222222222222222"}
+      ]
+    },
+    {
+      "name": "CollapsedBody",
+      "graphType": "CollapsedGraph",
+      "parentGraphPath": "/Game/Test.BP:EventGraph",
+      "graphDepth": 1,
+      "nodes": [
+        {"nodeType": "K2Node_Tunnel", "nodeGuid": "33333333333333333333333333333333"}
+      ]
+    }
+  ],
+  "detailedFunctions": [
+    {
+      "name": "TestFunction",
+      "bytecodeSize": 24,
+      "rawInMemoryBytecodeDiagnostic": {
+        "value": "0123456789abcdef0123456789abcdef",
+        "algorithm": "MD5",
+        "source": "UFunction::Script in-memory bytes",
+        "stabilityScope": "single_loaded_function_instance",
+        "canonical": false,
+        "semanticEquivalenceProof": false
+      }
+    }
+  ],
+  "compilerIRFallback": {
+    "bytecodeBackedFunctions": [
+      {
+        "name": "TestFunction",
+        "bytecodeSize": 24,
+        "rawInMemoryBytecodeDiagnostic": {
+          "value": "0123456789abcdef0123456789abcdef",
+          "algorithm": "MD5",
+          "source": "UFunction::Script in-memory bytes",
+          "stabilityScope": "single_loaded_function_instance",
+          "canonical": false,
+          "semanticEquivalenceProof": false
+        }
+      }
+    ]
+  }
+}

@@ -347,7 +347,7 @@ struct BLUEPRINTSERIALIZER_API FBS_FunctionInfo
 	int32 BytecodeSize = 0;
 
 	UPROPERTY()
-	FString BytecodeHash;
+	FString RawInMemoryBytecodeMd5;
 	
 	UPROPERTY()
 	FString AccessSpecifier; // "public", "protected", "private"

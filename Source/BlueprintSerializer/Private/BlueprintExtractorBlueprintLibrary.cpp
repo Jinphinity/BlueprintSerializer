@@ -91,6 +91,18 @@ namespace
 		const FString PathHash = FMD5::HashAnsiString(*IdentityPath).Left(8);
 		return FString::Printf(TEXT("%s_%s"), *SafeName, *PathHash);
 	}
+
+	TSharedPtr<FJsonObject> BuildRawInMemoryBytecodeDiagnostic(const FString& Md5)
+	{
+		TSharedPtr<FJsonObject> Diagnostic = MakeShareable(new FJsonObject);
+		Diagnostic->SetStringField(TEXT("value"), Md5);
+		Diagnostic->SetStringField(TEXT("algorithm"), TEXT("MD5"));
+		Diagnostic->SetStringField(TEXT("source"), TEXT("UFunction::Script in-memory bytes"));
+		Diagnostic->SetStringField(TEXT("stabilityScope"), TEXT("single_loaded_function_instance"));
+		Diagnostic->SetBoolField(TEXT("canonical"), false);
+		Diagnostic->SetBoolField(TEXT("semanticEquivalenceProof"), false);
+		return Diagnostic;
+	}
 }
 
 bool UBlueprintSerializerBlueprintLibrary::SerializeAllProjectBlueprints()
@@ -349,7 +361,7 @@ FString UBlueprintSerializerBlueprintLibrary::AuditSingleBlueprintToFile(UBluepr
 
 	// Build audit report
 	TSharedPtr<FJsonObject> Root = MakeShareable(new FJsonObject);
-	Root->SetStringField(TEXT("schemaVersion"), Data.SchemaVersion.IsEmpty() ? TEXT("1.5") : Data.SchemaVersion);
+	Root->SetStringField(TEXT("schemaVersion"), Data.SchemaVersion.IsEmpty() ? TEXT("1.7") : Data.SchemaVersion);
 	Root->SetStringField(TEXT("blueprintName"), Data.BlueprintName);
 	Root->SetStringField(TEXT("blueprintPath"), Data.BlueprintPath);
 	Root->SetStringField(TEXT("parentClass"), Data.ParentClassName);
@@ -387,8 +399,9 @@ FString UBlueprintSerializerBlueprintLibrary::AuditSingleBlueprintToFile(UBluepr
 	}
 	Root->SetArrayField(TEXT("nodeTypes"), NodeTypes);
 
-	// Function bytecode hashes (GeneratedClass only)
-	TArray<TSharedPtr<FJsonValue>> FunctionHashes;
+	// Raw UFunction::Script fingerprints are intentionally noncanonical. The
+	// in-memory buffer embeds process-resolved names and object/field addresses.
+	TArray<TSharedPtr<FJsonValue>> RawBytecodeDiagnostics;
 	if (UClass* GenClass = TargetBlueprint->GeneratedClass)
 	{
 		for (TFieldIterator<UFunction> FuncIt(GenClass, EFieldIteratorFlags::ExcludeSuper); FuncIt; ++FuncIt)
@@ -405,11 +418,13 @@ FString UBlueprintSerializerBlueprintLibrary::AuditSingleBlueprintToFile(UBluepr
 			TSharedPtr<FJsonObject> FuncObj = MakeShareable(new FJsonObject);
 			FuncObj->SetStringField(TEXT("functionName"), Func->GetName());
 			FuncObj->SetNumberField(TEXT("bytecodeSize"), Script.Num());
-			FuncObj->SetStringField(TEXT("md5"), Hash);
-			FunctionHashes.Add(MakeShareable(new FJsonValueObject(FuncObj)));
+			FuncObj->SetObjectField(
+				TEXT("rawInMemoryBytecodeDiagnostic"),
+				BuildRawInMemoryBytecodeDiagnostic(Hash));
+			RawBytecodeDiagnostics.Add(MakeShareable(new FJsonValueObject(FuncObj)));
 		}
 	}
-	Root->SetArrayField(TEXT("bytecodeHashes"), FunctionHashes);
+	Root->SetArrayField(TEXT("rawInMemoryBytecodeDiagnostics"), RawBytecodeDiagnostics);
 
 	// Serialize report
 	FString OutputString;
@@ -3402,10 +3417,12 @@ FString UBlueprintSerializerBlueprintLibrary::RoundTripAuditSingleBlueprint(UBlu
 	FCompilerResultsLog CompileLog;
 	FKismetEditorUtilities::CompileBlueprint(TempBP, EBlueprintCompileOptions::None, &CompileLog);
 
-	// Compute hashes
-	TMap<FString, FString> OriginalHashes;
-	TMap<FString, FString> RoundTripHashes;
-	auto CollectHashes = [](UBlueprint* BP, TMap<FString, FString>& Out)
+	// Collect raw in-memory fingerprints for diagnostics only. These values are
+	// not a semantic round-trip gate because Script embeds process-local IDs and
+	// addresses, and reconstructed objects necessarily have different identities.
+	TMap<FString, FString> OriginalRawBytecodeMd5;
+	TMap<FString, FString> RoundTripRawBytecodeMd5;
+	auto CollectRawBytecodeMd5 = [](UBlueprint* BP, TMap<FString, FString>& Out)
 	{
 		if (!BP || !BP->GeneratedClass)
 		{
@@ -3423,31 +3440,36 @@ FString UBlueprintSerializerBlueprintLibrary::RoundTripAuditSingleBlueprint(UBlu
 			Out.Add(Func->GetName(), Hash);
 		}
 	};
-	CollectHashes(TargetBlueprint, OriginalHashes);
-	CollectHashes(TempBP, RoundTripHashes);
+	CollectRawBytecodeMd5(TargetBlueprint, OriginalRawBytecodeMd5);
+	CollectRawBytecodeMd5(TempBP, RoundTripRawBytecodeMd5);
 
-	// Compare
-	TArray<TSharedPtr<FJsonValue>> MismatchArray;
-	for (const TPair<FString, FString>& Pair : OriginalHashes)
+	TArray<TSharedPtr<FJsonValue>> RawDiagnosticDifferences;
+	for (const TPair<FString, FString>& Pair : OriginalRawBytecodeMd5)
 	{
-		const FString* NewHash = RoundTripHashes.Find(Pair.Key);
+		const FString* NewHash = RoundTripRawBytecodeMd5.Find(Pair.Key);
 		if (!NewHash || *NewHash != Pair.Value)
 		{
 			TSharedPtr<FJsonObject> Entry = MakeShareable(new FJsonObject);
 			Entry->SetStringField(TEXT("functionName"), Pair.Key);
-			Entry->SetStringField(TEXT("originalHash"), Pair.Value);
-			Entry->SetStringField(TEXT("roundTripHash"), NewHash ? *NewHash : TEXT(""));
-			MismatchArray.Add(MakeShareable(new FJsonValueObject(Entry)));
+			Entry->SetObjectField(
+				TEXT("original"),
+				BuildRawInMemoryBytecodeDiagnostic(Pair.Value));
+			Entry->SetObjectField(
+				TEXT("roundTrip"),
+				BuildRawInMemoryBytecodeDiagnostic(NewHash ? *NewHash : TEXT("")));
+			RawDiagnosticDifferences.Add(MakeShareable(new FJsonValueObject(Entry)));
 		}
 	}
 
 	// Report
 	TSharedPtr<FJsonObject> Report = MakeShareable(new FJsonObject);
+	Report->SetStringField(TEXT("schemaVersion"), TEXT("1.7"));
 	Report->SetStringField(TEXT("blueprintName"), TargetBlueprint->GetName());
 	Report->SetStringField(TEXT("blueprintPath"), TargetBlueprint->GetPathName());
-	Report->SetNumberField(TEXT("originalFunctionCount"), OriginalHashes.Num());
-	Report->SetNumberField(TEXT("roundTripFunctionCount"), RoundTripHashes.Num());
-	Report->SetArrayField(TEXT("bytecodeMismatches"), MismatchArray);
+	Report->SetNumberField(TEXT("originalFunctionCount"), OriginalRawBytecodeMd5.Num());
+	Report->SetNumberField(TEXT("roundTripFunctionCount"), RoundTripRawBytecodeMd5.Num());
+	Report->SetArrayField(TEXT("rawInMemoryBytecodeDiagnosticDifferences"), RawDiagnosticDifferences);
+	Report->SetBoolField(TEXT("rawBytecodeDifferencesAffectRoundTripResult"), false);
 	Report->SetNumberField(TEXT("compileErrorCount"), CompileLog.NumErrors);
 	Report->SetNumberField(TEXT("compileWarningCount"), CompileLog.NumWarnings);
 	if (CompileLog.Messages.Num() > 0)

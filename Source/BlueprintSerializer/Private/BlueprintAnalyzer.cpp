@@ -297,6 +297,18 @@ namespace
         return Result;
     }
 
+    TSharedPtr<FJsonObject> BuildRawInMemoryBytecodeDiagnostic(const FString& Md5)
+    {
+        TSharedPtr<FJsonObject> Diagnostic = MakeShareable(new FJsonObject);
+        Diagnostic->SetStringField(TEXT("value"), Md5);
+        Diagnostic->SetStringField(TEXT("algorithm"), TEXT("MD5"));
+        Diagnostic->SetStringField(TEXT("source"), TEXT("UFunction::Script in-memory bytes"));
+        Diagnostic->SetStringField(TEXT("stabilityScope"), TEXT("single_loaded_function_instance"));
+        Diagnostic->SetBoolField(TEXT("canonical"), false);
+        Diagnostic->SetBoolField(TEXT("semanticEquivalenceProof"), false);
+        return Diagnostic;
+    }
+
     TArray<USCS_Node*> GatherAllConstructionScriptNodes(UBlueprint* Blueprint)
     {
         TArray<USCS_Node*> Nodes;
@@ -1860,7 +1872,7 @@ FBS_BlueprintData UBlueprintAnalyzer::AnalyzeBlueprint(UBlueprint* Blueprint)
 	}
 	
 	// Basic Blueprint information
-	Data.SchemaVersion = TEXT("1.6");
+	Data.SchemaVersion = TEXT("1.7");
 	Data.BlueprintPath = Blueprint->GetPathName();
 	Data.BlueprintName = Blueprint->GetName();
 	Data.ParentClassName = Blueprint->ParentClass ? Blueprint->ParentClass->GetName() : TEXT("None");
@@ -2349,79 +2361,49 @@ TArray<FString> UBlueprintAnalyzer::ExtractGraphNodes(UBlueprint* Blueprint, int
 		return GraphNodes;
 	}
 	
-	// Process all graphs in the Blueprint (UE5.5 compatible approach)
-	TArray<UEdGraph*> AllGraphs;
-	
-	// Add ubergraph pages (main event graph)
-	for (UEdGraph* Graph : Blueprint->UbergraphPages)
+	// Keep the legacy flat surface complete with the canonical structured graph
+	// surface. Composite BoundGraph objects are not present in the Blueprint root
+	// graph arrays, and root arrays can alias the same graph, so traverse every
+	// reachable graph exactly once with an explicit cycle guard.
+	TSet<const UEdGraph*> VisitedGraphs;
+	TFunction<void(UEdGraph*)> EmitReachableGraph;
+	EmitReachableGraph = [&](UEdGraph* Graph)
 	{
-		if (Graph)
+		if (!Graph || VisitedGraphs.Contains(Graph))
 		{
-			AllGraphs.Add(Graph);
+			return;
 		}
-	}
-	
-	// Add function graphs
-	for (UEdGraph* Graph : Blueprint->FunctionGraphs)
-	{
-		if (Graph)
-		{
-			AllGraphs.Add(Graph);
-		}
-	}
 
-	for (UEdGraph* Graph : Blueprint->EventGraphs)
-	{
-		if (Graph)
+		VisitedGraphs.Add(Graph);
+		for (UEdGraphNode* Node : Graph->Nodes)
 		{
-			AllGraphs.Add(Graph);
-		}
-	}
-	
-	// Add macro graphs if any
-	for (UEdGraph* Graph : Blueprint->MacroGraphs)
-	{
-		if (Graph)
-		{
-			AllGraphs.Add(Graph);
-		}
-	}
-
-	for (UEdGraph* Graph : Blueprint->DelegateSignatureGraphs)
-	{
-		if (Graph)
-		{
-			AllGraphs.Add(Graph);
-		}
-	}
-
-	for (UEdGraph* Graph : Blueprint->EventGraphs)
-	{
-		if (Graph)
-		{
-			AllGraphs.Add(Graph);
-		}
-	}
-	
-	for (UEdGraph* Graph : AllGraphs)
-	{
-		if (Graph)
-		{
-			for (UEdGraphNode* Node : Graph->Nodes)
+			if (!Node)
 			{
-				if (Node)
-				{
-					// Extract detailed node information including pins and connections
-					FString NodeInfo = AnalyzeNodeWithConnections(Node);
-					if (!NodeInfo.IsEmpty())
-					{
-						GraphNodes.Add(NodeInfo);
-					}
-					OutTotalNodeCount++;
-				}
+				continue;
+			}
+
+			const FString NodeInfo = AnalyzeNodeWithConnections(Node);
+			if (!NodeInfo.IsEmpty())
+			{
+				GraphNodes.Add(NodeInfo);
+			}
+			OutTotalNodeCount++;
+		}
+
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			if (const UK2Node_Composite* Composite = Cast<UK2Node_Composite>(Node))
+			{
+				EmitReachableGraph(Composite->BoundGraph);
 			}
 		}
-	}
+	};
+
+	for (UEdGraph* Graph : Blueprint->UbergraphPages) EmitReachableGraph(Graph);
+	for (UEdGraph* Graph : Blueprint->FunctionGraphs) EmitReachableGraph(Graph);
+	for (UEdGraph* Graph : Blueprint->MacroGraphs) EmitReachableGraph(Graph);
+	for (UEdGraph* Graph : Blueprint->DelegateSignatureGraphs) EmitReachableGraph(Graph);
+	for (UEdGraph* Graph : Blueprint->EventGraphs) EmitReachableGraph(Graph);
 	
 	return GraphNodes;
 }
@@ -6421,7 +6403,7 @@ TSharedPtr<FJsonObject> UBlueprintAnalyzer::BlueprintDataToJsonObject(const FBS_
 	TSharedPtr<FJsonObject> JsonObject = MakeShareable(new FJsonObject);
 	
 	// Version info at the top
-	const FString SchemaVersion = Data.SchemaVersion.IsEmpty() ? TEXT("1.5") : Data.SchemaVersion;
+	const FString SchemaVersion = Data.SchemaVersion.IsEmpty() ? TEXT("1.7") : Data.SchemaVersion;
 	JsonObject->SetStringField(TEXT("schemaVersion"), SchemaVersion);
 	JsonObject->SetStringField(TEXT("version"), SchemaVersion);
 	JsonObject->SetStringField(TEXT("engine_version"), FString::Printf(TEXT("%d.%d.%d"), 
@@ -6623,7 +6605,7 @@ TSharedPtr<FJsonObject> UBlueprintAnalyzer::BlueprintDataToJsonObject(const FBS_
 	int32 BytecodeBackedFunctionCount = 0;
 	for (const FBS_FunctionInfo& FuncInfo : Data.DetailedFunctions)
 	{
-		if (FuncInfo.BytecodeSize <= 0 && FuncInfo.BytecodeHash.IsEmpty())
+		if (FuncInfo.BytecodeSize <= 0 && FuncInfo.RawInMemoryBytecodeMd5.IsEmpty())
 		{
 			continue;
 		}
@@ -6632,7 +6614,12 @@ TSharedPtr<FJsonObject> UBlueprintAnalyzer::BlueprintDataToJsonObject(const FBS_
 		BytecodeObj->SetStringField(TEXT("name"), FuncInfo.FunctionName);
 		BytecodeObj->SetStringField(TEXT("functionPath"), FuncInfo.FunctionPath);
 		BytecodeObj->SetNumberField(TEXT("bytecodeSize"), FuncInfo.BytecodeSize);
-		BytecodeObj->SetStringField(TEXT("bytecodeHash"), FuncInfo.BytecodeHash);
+		if (!FuncInfo.RawInMemoryBytecodeMd5.IsEmpty())
+		{
+			BytecodeObj->SetObjectField(
+				TEXT("rawInMemoryBytecodeDiagnostic"),
+				BuildRawInMemoryBytecodeDiagnostic(FuncInfo.RawInMemoryBytecodeMd5));
+		}
 		BytecodeObj->SetBoolField(TEXT("isOverride"), FuncInfo.bIsOverride);
 		BytecodeObj->SetBoolField(TEXT("callsParent"), FuncInfo.bCallsParent);
 		// CR-035: emit node traces for unsupported/partially-supported nodes in this bytecode function
@@ -6737,7 +6724,12 @@ TSharedPtr<FJsonObject> UBlueprintAnalyzer::BlueprintDataToJsonObject(const FBS_
 		FuncObj->SetStringField(TEXT("returnType"), FuncInfo.ReturnType);
 		FuncObj->SetStringField(TEXT("returnTypeObjectPath"), FuncInfo.ReturnTypeObjectPath);
 		FuncObj->SetNumberField(TEXT("bytecodeSize"), FuncInfo.BytecodeSize);
-		FuncObj->SetStringField(TEXT("bytecodeHash"), FuncInfo.BytecodeHash);
+		if (!FuncInfo.RawInMemoryBytecodeMd5.IsEmpty())
+		{
+			FuncObj->SetObjectField(
+				TEXT("rawInMemoryBytecodeDiagnostic"),
+				BuildRawInMemoryBytecodeDiagnostic(FuncInfo.RawInMemoryBytecodeMd5));
+		}
 		FuncObj->SetArrayField(TEXT("declarationSpecifiers"), BuildStringArray(FuncInfo.DeclarationSpecifiers));
 		
 		TArray<TSharedPtr<FJsonValue>> InputParamArray;
@@ -9426,7 +9418,12 @@ TArray<FBS_FunctionInfo> UBlueprintAnalyzer::ExtractDetailedFunctions(UBlueprint
 			if (Func->Script.Num() > 0)
 			{
 				FuncInfo.BytecodeSize = Func->Script.Num();
-				FuncInfo.BytecodeHash = FMD5::HashBytes(Func->Script.GetData(), Func->Script.Num());
+				// UFunction::Script stores process-resolved FName IDs and UObject/FField
+				// addresses. Preserve the raw MD5 only as an explicitly noncanonical,
+				// single-loaded-instance diagnostic; it is not change/equivalence proof.
+				FuncInfo.RawInMemoryBytecodeMd5 = FMD5::HashBytes(
+					Func->Script.GetData(),
+					Func->Script.Num());
 			}
 
 			for (TFieldIterator<FProperty> PropIt(Func); PropIt; ++PropIt)

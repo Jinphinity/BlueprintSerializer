@@ -120,6 +120,15 @@ Every node in `structuredGraphs[].nodes[]` carries:
 - `nodeProperties` — `TMap<FString,FString>` of all `meta.*` enrichment fields (see below)
 - `pins[]` — full pin data: name, direction, category, objectPath, defaultValue, connected, etc.
 
+Schema 1.7 also requires the legacy JSON-string `graphNodes[]` surface to contain
+the exact same reachable node GUID set as `structuredGraphs[].nodes[]`. Both surfaces
+recursively traverse every `UK2Node_Composite::BoundGraph` with duplicate/cycle guards.
+
+Raw `UFunction::Script` MD5 values are exposed only as
+`rawInMemoryBytecodeDiagnostic` with `canonical=false`; engine bytecode buffers embed
+process-local name IDs and object/field addresses and therefore cannot prove change,
+equivalence, or deterministic reconstruction.
+
 Exec edges in `structuredGraphs[].flows.exec[]`:
 - `sourceNodeGuid + sourcePinName → targetNodeGuid + targetPinName`
 - Branch pins are labeled `'then'/'else'` or `'True'/'False'`; sequence nodes use `'Then 0'`, `'Then 1'`; fully unambiguous
