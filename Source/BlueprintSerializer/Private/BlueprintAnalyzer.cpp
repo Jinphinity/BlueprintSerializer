@@ -27,6 +27,16 @@
 #include "UObject/Script.h"
 #include "Engine/UserDefinedEnum.h"
 #include "StructUtils/UserDefinedStruct.h"
+#include "WidgetBlueprint.h"
+#include "Blueprint/WidgetTree.h"
+#include "Blueprint/WidgetBlueprintGeneratedClass.h"
+#include "Components/Widget.h"
+#include "Components/PanelWidget.h"
+#include "Components/PanelSlot.h"
+#include "Animation/WidgetAnimation.h"
+#include "MovieScene.h"
+#include "MovieSceneBinding.h"
+#include "MovieSceneTrack.h"
 
 #include "AnimGraphNode_Base.h"
 #include "AnimGraphNode_BlendSpacePlayer.h"
@@ -147,6 +157,7 @@
 #include "K2Node_LatentAbilityCall.h"
 #include "K2Node_LatentGameplayTaskCall.h"
 #include "K2Node_EnhancedInputAction.h"
+#include "K2Node_GetInputActionValue.h"
 #include "InputAction.h"       // UInputAction full definition (EnhancedInput module)
 #include "EdGraphSchema_K2.h"
 #include "EdGraph/EdGraph.h"
@@ -747,6 +758,9 @@ namespace
             TEXT("K2Node_PlayMontage"),                           // Latent montage playback (proxy factory pattern)
             TEXT("K2Node_GetInputAxisKeyValue"),                  // Input axis float value by key
             TEXT("K2Node_LoadAssetClass"),                        // Async soft class loader (BaseAsyncTask pattern)
+            TEXT("K2Node_MapForEach"),                            // Map loop with key/value/break/completed pins
+            TEXT("GameplayTagsK2Node_SwitchGameplayTag"),         // Gameplay-tag switch cases and pins
+            TEXT("K2Node_GetInputActionValue"),                   // Enhanced Input action-value read
         };
 
         return SupportedTypes.Contains(NodeType);
@@ -852,6 +866,7 @@ namespace
         return Path;
     }
 
+#if UEARATAME_HAS_CONTROL_RIG
     FGuid MakeStableRigVMNodeGuid(const URigVMNode* VMNode)
     {
         if (!VMNode)
@@ -870,6 +885,7 @@ namespace
             GetTypeHash(GraphName),
             GetTypeHash(NodeClass));
     }
+#endif
 
     void AddCandidatePath(const FString& RawPath, TSet<FString>& OutPaths)
     {
@@ -970,6 +986,61 @@ namespace
                 AddCandidatePath(Token, OutPaths);
             }
         }
+    }
+
+    FString FormatPropertyFlags(const EPropertyFlags Flags)
+    {
+        return FString::Printf(TEXT("0x%016llX"), static_cast<unsigned long long>(Flags));
+    }
+
+    FString DescribeLifetimeCondition(const ELifetimeCondition Condition)
+    {
+        switch (Condition)
+        {
+        case COND_None: return TEXT("None");
+        case COND_InitialOnly: return TEXT("InitialOnly");
+        case COND_OwnerOnly: return TEXT("OwnerOnly");
+        case COND_SkipOwner: return TEXT("SkipOwner");
+        case COND_SimulatedOnly: return TEXT("SimulatedOnly");
+        case COND_AutonomousOnly: return TEXT("AutonomousOnly");
+        case COND_SimulatedOrPhysics: return TEXT("SimulatedOrPhysics");
+        case COND_InitialOrOwner: return TEXT("InitialOrOwner");
+        case COND_Custom: return TEXT("Custom");
+        case COND_ReplayOrOwner: return TEXT("ReplayOrOwner");
+        case COND_ReplayOnly: return TEXT("ReplayOnly");
+        case COND_SimulatedOnlyNoReplay: return TEXT("SimulatedOnlyNoReplay");
+        case COND_SimulatedOrPhysicsNoReplay: return TEXT("SimulatedOrPhysicsNoReplay");
+        case COND_SkipReplay: return TEXT("SkipReplay");
+        case COND_Dynamic: return TEXT("Dynamic");
+        case COND_Never: return TEXT("Never");
+        default: return FString::Printf(TEXT("Unknown(%d)"), static_cast<int32>(Condition));
+        }
+    }
+
+    void CollectPropertyAssetPaths(
+        const TMap<FString, FString>& Properties,
+        TSet<FString>& OutPaths)
+    {
+        for (const TPair<FString, FString>& Pair : Properties)
+        {
+            CollectAssetPathsFromText(Pair.Value, OutPaths);
+        }
+    }
+
+    FString FormatFrameRange(const TRange<FFrameNumber>& Range)
+    {
+        const FString Lower = Range.HasLowerBound()
+            ? FString::FromInt(Range.GetLowerBoundValue().Value)
+            : TEXT("Open");
+        const FString Upper = Range.HasUpperBound()
+            ? FString::FromInt(Range.GetUpperBoundValue().Value)
+            : TEXT("Open");
+        return FString::Printf(TEXT("%s:%s"), *Lower, *Upper);
+    }
+
+    FString FormatFrameRate(const FFrameRate& Rate)
+    {
+        return FString::Printf(TEXT("%d/%d"), Rate.Numerator, Rate.Denominator);
     }
 
     UObject* TryLoadBestCandidate(const FString& RawPath)
@@ -1767,7 +1838,7 @@ FBS_BlueprintData UBlueprintAnalyzer::AnalyzeBlueprint(UBlueprint* Blueprint)
 	}
 	
 	// Basic Blueprint information
-	Data.SchemaVersion = TEXT("1.5");
+	Data.SchemaVersion = TEXT("1.6");
 	Data.BlueprintPath = Blueprint->GetPathName();
 	Data.BlueprintName = Blueprint->GetName();
 	Data.ParentClassName = Blueprint->ParentClass ? Blueprint->ParentClass->GetName() : TEXT("None");
@@ -1805,6 +1876,7 @@ FBS_BlueprintData UBlueprintAnalyzer::AnalyzeBlueprint(UBlueprint* Blueprint)
 	Data.DetailedComponents = ExtractDetailedComponents(Blueprint);
 	Data.AssetReferences = ExtractAssetReferences(Blueprint);
 	ExtractTimelineData(Blueprint, Data);
+	ExtractWidgetBlueprintData(Blueprint, Data);
 	
 	Data.EventNodes = ExtractEventNodes(Blueprint);
 	Data.GraphNodes = ExtractGraphNodes(Blueprint, Data.TotalNodeCount);
@@ -1952,6 +2024,21 @@ FBS_BlueprintData UBlueprintAnalyzer::AnalyzeBlueprint(UBlueprint* Blueprint)
 
 			CollectQuotedTagNames(TEXT("TagName=\""), TEXT("\""));
 			CollectQuotedTagNames(TEXT("TagName='"), TEXT("'"));
+
+			TArray<FString> DelimitedValues;
+			Text.ParseIntoArray(DelimitedValues, TEXT(";"), true);
+			if (DelimitedValues.Num() > 1)
+			{
+				for (FString Value : DelimitedValues)
+				{
+					Value.TrimStartAndEndInline();
+					if (IsLikelyGameplayTagLiteral(Value))
+					{
+						OutTagNames.Add(Value);
+					}
+				}
+				return;
+			}
 
 			if (IsLikelyGameplayTagLiteral(Text))
 			{
@@ -2320,6 +2407,7 @@ TArray<FBS_GraphData_Ext> UBlueprintAnalyzer::ExtractStructuredGraphsExt(UBluepr
 {
 	TArray<FBS_GraphData_Ext> StructuredGraphs;
 	OutTotalNodeCount = 0;
+	TSet<const UEdGraph*> EmittedGraphs;
 	
 	if (!Blueprint)
 	{
@@ -2453,11 +2541,13 @@ TArray<FBS_GraphData_Ext> UBlueprintAnalyzer::ExtractStructuredGraphsExt(UBluepr
 	// Process Ubergraph pages (main event graph)
 	for (UEdGraph* Graph : Blueprint->UbergraphPages)
 	{
-		if (Graph)
+		if (Graph && !EmittedGraphs.Contains(Graph))
 		{
+			EmittedGraphs.Add(Graph);
 			FBS_GraphData_Ext GraphData;
 			GraphData.GraphName = Graph->GetName();
 			GraphData.GraphType = TEXT("Ubergraph");
+			GraphData.GraphPath = Graph->GetPathName();
 			TSet<FString> SeenDataLinks;
 			
 			// Process nodes in this graph
@@ -2506,11 +2596,13 @@ TArray<FBS_GraphData_Ext> UBlueprintAnalyzer::ExtractStructuredGraphsExt(UBluepr
 	// Process function graphs
 	for (UEdGraph* Graph : Blueprint->FunctionGraphs)
 	{
-		if (Graph)
+		if (Graph && !EmittedGraphs.Contains(Graph))
 		{
+			EmittedGraphs.Add(Graph);
 			FBS_GraphData_Ext GraphData;
 			GraphData.GraphName = Graph->GetName();
 			GraphData.GraphType = IsConstructionScriptGraph(Graph) ? TEXT("ConstructionScript") : TEXT("Function");
+			GraphData.GraphPath = Graph->GetPathName();
 			TSet<FString> SeenDataLinks;
 			
 			for (UEdGraphNode* Node : Graph->Nodes)
@@ -2556,11 +2648,13 @@ TArray<FBS_GraphData_Ext> UBlueprintAnalyzer::ExtractStructuredGraphsExt(UBluepr
 	// Process macro graphs
 	for (UEdGraph* Graph : Blueprint->MacroGraphs)
 	{
-		if (Graph)
+		if (Graph && !EmittedGraphs.Contains(Graph))
 		{
+			EmittedGraphs.Add(Graph);
 			FBS_GraphData_Ext GraphData;
 			GraphData.GraphName = Graph->GetName();
 			GraphData.GraphType = TEXT("Macro");
+			GraphData.GraphPath = Graph->GetPathName();
 			TSet<FString> SeenDataLinks;
 			
 			for (UEdGraphNode* Node : Graph->Nodes)
@@ -2605,11 +2699,13 @@ TArray<FBS_GraphData_Ext> UBlueprintAnalyzer::ExtractStructuredGraphsExt(UBluepr
 
 	for (UEdGraph* Graph : Blueprint->DelegateSignatureGraphs)
 	{
-		if (Graph)
+		if (Graph && !EmittedGraphs.Contains(Graph))
 		{
+			EmittedGraphs.Add(Graph);
 			FBS_GraphData_Ext GraphData;
 			GraphData.GraphName = Graph->GetName();
 			GraphData.GraphType = TEXT("DelegateSignature");
+			GraphData.GraphPath = Graph->GetPathName();
 			TSet<FString> SeenDataLinks;
 
 			for (UEdGraphNode* Node : Graph->Nodes)
@@ -2653,11 +2749,13 @@ TArray<FBS_GraphData_Ext> UBlueprintAnalyzer::ExtractStructuredGraphsExt(UBluepr
 
 	for (UEdGraph* Graph : Blueprint->EventGraphs)
 	{
-		if (Graph)
+		if (Graph && !EmittedGraphs.Contains(Graph))
 		{
+			EmittedGraphs.Add(Graph);
 			FBS_GraphData_Ext GraphData;
 			GraphData.GraphName = Graph->GetName();
 			GraphData.GraphType = TEXT("Event");
+			GraphData.GraphPath = Graph->GetPathName();
 			TSet<FString> SeenDataLinks;
 
 			for (UEdGraphNode* Node : Graph->Nodes)
@@ -2699,6 +2797,86 @@ TArray<FBS_GraphData_Ext> UBlueprintAnalyzer::ExtractStructuredGraphsExt(UBluepr
 		}
 	}
 	
+	// Recursively emit every authored collapsed-graph interior. BoundGraph objects are
+	// not listed in Blueprint->UbergraphPages/FunctionGraphs/MacroGraphs, so the old
+	// root-only sweep exposed the composite shell but silently omitted its body.
+	TFunction<void(UEdGraph*, int32)> EmitCollapsedChildren;
+	EmitCollapsedChildren = [&](UEdGraph* ParentGraph, const int32 ParentDepth)
+	{
+		if (!ParentGraph)
+		{
+			return;
+		}
+
+		for (UEdGraphNode* ParentNode : ParentGraph->Nodes)
+		{
+			UK2Node_Composite* Composite = Cast<UK2Node_Composite>(ParentNode);
+			UEdGraph* BoundGraph = Composite ? Composite->BoundGraph : nullptr;
+			if (!BoundGraph || EmittedGraphs.Contains(BoundGraph))
+			{
+				continue;
+			}
+
+			EmittedGraphs.Add(BoundGraph);
+			FBS_GraphData_Ext GraphData;
+			GraphData.GraphName = BoundGraph->GetName();
+			GraphData.GraphType = TEXT("CollapsedGraph");
+			GraphData.GraphPath = BoundGraph->GetPathName();
+			GraphData.ParentGraphPath = ParentGraph->GetPathName();
+			GraphData.OwningCompositeNodeGuid = Composite->NodeGuid.ToString();
+			GraphData.GraphDepth = ParentDepth + 1;
+			GraphData.bIsCollapsedGraph = true;
+			TSet<FString> SeenDataLinks;
+
+			for (UEdGraphNode* Node : BoundGraph->Nodes)
+			{
+				if (!Node)
+				{
+					continue;
+				}
+
+				GraphData.Nodes.Add(AnalyzeNodeToStruct(Node));
+				for (UEdGraphPin* Pin : Node->Pins)
+				{
+					if (!Pin || Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec || Pin->Direction != EGPD_Output)
+					{
+						continue;
+					}
+
+					for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
+					{
+						if (!LinkedPin || !LinkedPin->GetOwningNode())
+						{
+							continue;
+						}
+
+						FBS_FlowEdge Edge;
+						Edge.SourceNodeGuid = Node->NodeGuid;
+						Edge.SourcePinName = Pin->PinName;
+						Edge.SourcePinId = Pin->PinId;
+						Edge.TargetNodeGuid = LinkedPin->GetOwningNode()->NodeGuid;
+						Edge.TargetPinName = LinkedPin->PinName;
+						Edge.TargetPinId = LinkedPin->PinId;
+						GraphData.Execution.Add(Edge);
+					}
+				}
+
+				AddDataLinks(Node, GraphData, SeenDataLinks);
+				OutTotalNodeCount++;
+			}
+
+			SweepGraphBoundaryPins(BoundGraph, GraphData);
+			StructuredGraphs.Add(MoveTemp(GraphData));
+			EmitCollapsedChildren(BoundGraph, ParentDepth + 1);
+		}
+	};
+
+	for (UEdGraph* RootGraph : Blueprint->UbergraphPages) EmitCollapsedChildren(RootGraph, 0);
+	for (UEdGraph* RootGraph : Blueprint->FunctionGraphs) EmitCollapsedChildren(RootGraph, 0);
+	for (UEdGraph* RootGraph : Blueprint->MacroGraphs) EmitCollapsedChildren(RootGraph, 0);
+	for (UEdGraph* RootGraph : Blueprint->DelegateSignatureGraphs) EmitCollapsedChildren(RootGraph, 0);
+	for (UEdGraph* RootGraph : Blueprint->EventGraphs) EmitCollapsedChildren(RootGraph, 0);
+
 	return StructuredGraphs;
 }
 
@@ -4742,6 +4920,64 @@ FBS_NodeData UBlueprintAnalyzer::AnalyzeNodeToStruct(UEdGraphNode* Node)
             }
         }
 
+        // GameplayTagsEditor defines this node outside BlueprintGraph. Avoid a hard
+        // module/header dependency and serialize its public reconstruction surface
+        // from stable graph pins plus reflected comparison properties.
+        if (K2->GetClass()->GetName() == TEXT("GameplayTagsK2Node_SwitchGameplayTag"))
+        {
+            AddMetaBool(TEXT("meta.isSwitch"), true);
+            AddMeta(TEXT("meta.switchType"), TEXT("GameplayTag"));
+
+            TArray<FString> Cases;
+            TArray<FString> CasePinIds;
+            for (UEdGraphPin* Pin : K2->Pins)
+            {
+                if (!Pin || Pin->Direction != EGPD_Output ||
+                    Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+                {
+                    continue;
+                }
+
+                if (Pin->PinName == TEXT("Default"))
+                {
+                    AddMeta(TEXT("meta.switchDefaultPinId"), Pin->PinId.ToString());
+                    continue;
+                }
+
+                Cases.Add(Pin->PinName.ToString());
+                CasePinIds.Add(Pin->PinId.ToString());
+            }
+
+            AddMeta(TEXT("meta.switchCaseCount"), FString::FromInt(Cases.Num()));
+            if (Cases.Num() > 0)
+            {
+                AddMeta(TEXT("meta.switchCases"), FString::Join(Cases, TEXT(";")));
+                AddMeta(TEXT("meta.switchCasePinIds"), FString::Join(CasePinIds, TEXT(";")));
+            }
+
+            if (UEdGraphPin* SelectionPin = K2->FindPin(TEXT("Selection"), EGPD_Input))
+            {
+                AddMeta(TEXT("meta.switchSelectionPinId"), SelectionPin->PinId.ToString());
+                AddMeta(TEXT("meta.switchSelectionType"), DescribePinTypeDetailed(SelectionPin->PinType));
+            }
+
+            if (FNameProperty* FunctionNameProperty = FindFProperty<FNameProperty>(
+                    K2->GetClass(), TEXT("FunctionName")))
+            {
+                AddMeta(TEXT("meta.switchComparisonFunction"),
+                    FunctionNameProperty->GetPropertyValue_InContainer(K2).ToString());
+            }
+            if (FClassProperty* FunctionClassProperty = FindFProperty<FClassProperty>(
+                    K2->GetClass(), TEXT("FunctionClass")))
+            {
+                if (UClass* FunctionClass = Cast<UClass>(
+                        FunctionClassProperty->GetObjectPropertyValue_InContainer(K2)))
+                {
+                    AddMeta(TEXT("meta.switchComparisonClass"), FunctionClass->GetPathName());
+                }
+            }
+        }
+
         // --- Task 18: Composite (collapsed graph / tunnel) node ---
         if (UK2Node_Composite* Composite = Cast<UK2Node_Composite>(K2))
         {
@@ -5188,6 +5424,33 @@ FBS_NodeData UBlueprintAnalyzer::AnalyzeNodeToStruct(UEdGraphNode* Node)
                 AddMeta(TEXT("meta.asyncDelegatePinCount"),
                     FString::FromInt(DelegatePinNames.Num()));
             }
+
+            TArray<FString> InputPins;
+            TArray<FString> OutputDataPins;
+            for (UEdGraphPin* Pin : AsyncBase->Pins)
+            {
+                if (!Pin || Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
+                {
+                    continue;
+                }
+
+                const FString Description = FString::Printf(TEXT("%s:%s:%s"),
+                    *Pin->PinName.ToString(),
+                    *Pin->PinId.ToString(),
+                    *DescribePinTypeDetailed(Pin->PinType));
+                if (Pin->Direction == EGPD_Input)
+                {
+                    InputPins.Add(Description);
+                }
+                else if (Pin->Direction == EGPD_Output)
+                {
+                    OutputDataPins.Add(Description);
+                }
+            }
+            if (InputPins.Num() > 0)
+                AddMeta(TEXT("meta.asyncInputPins"), FString::Join(InputPins, TEXT(";")));
+            if (OutputDataPins.Num() > 0)
+                AddMeta(TEXT("meta.asyncOutputDataPins"), FString::Join(OutputDataPins, TEXT(";")));
         }
 
         // --- Task 36: AddComponent — adds a component instance defined by a CDO template ---
@@ -5513,6 +5776,68 @@ FBS_NodeData UBlueprintAnalyzer::AnalyzeNodeToStruct(UEdGraphNode* Node)
                     break;
                 }
             }
+        }
+
+        // Project/plugin map-loop nodes can be reconstructed entirely from their
+        // stable pin contract even when their concrete class header is unavailable.
+        if (K2->GetClass()->GetName() == TEXT("K2Node_MapForEach"))
+        {
+            AddMetaBool(TEXT("meta.isMapForEach"), true);
+            auto EmitMapPin = [&](const TCHAR* PinName, EEdGraphPinDirection Direction, const TCHAR* MetaKey)
+            {
+                if (UEdGraphPin* Pin = K2->FindPin(FName(PinName), Direction))
+                {
+                    AddMeta(MetaKey, Pin->PinId.ToString());
+                    if (Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+                    {
+                        AddMeta(FString(MetaKey) + TEXT("Type"), DescribePinTypeDetailed(Pin->PinType));
+                    }
+                }
+            };
+            EmitMapPin(TEXT("execute"), EGPD_Input, TEXT("meta.mapForEachExecutePinId"));
+            EmitMapPin(TEXT("MapPin"), EGPD_Input, TEXT("meta.mapForEachMapPinId"));
+            EmitMapPin(TEXT("BreakPin"), EGPD_Input, TEXT("meta.mapForEachBreakPinId"));
+            EmitMapPin(TEXT("then"), EGPD_Output, TEXT("meta.mapForEachLoopBodyPinId"));
+            EmitMapPin(TEXT("KeyPin"), EGPD_Output, TEXT("meta.mapForEachKeyPinId"));
+            EmitMapPin(TEXT("ValuePin"), EGPD_Output, TEXT("meta.mapForEachValuePinId"));
+            EmitMapPin(TEXT("CompletedPin"), EGPD_Output, TEXT("meta.mapForEachCompletedPinId"));
+        }
+
+        if (UK2Node_GetInputActionValue* InputValue = Cast<UK2Node_GetInputActionValue>(K2))
+        {
+            AddMetaBool(TEXT("meta.isGetInputActionValue"), true);
+            if (InputValue->InputAction)
+            {
+                AddMeta(TEXT("meta.inputActionPath"), InputValue->InputAction->GetPathName());
+                AddMeta(TEXT("meta.inputActionName"), InputValue->InputAction->GetName());
+            }
+            if (UEdGraphPin* ValuePin = K2->FindPin(TEXT("ReturnValue"), EGPD_Output))
+            {
+                AddMeta(TEXT("meta.inputActionValuePinId"), ValuePin->PinId.ToString());
+                AddMeta(TEXT("meta.inputActionValueType"), DescribePinTypeDetailed(ValuePin->PinType));
+            }
+        }
+
+        if (K2->GetClass()->GetName() == TEXT("K2Node_LoadAssetClass"))
+        {
+            AddMetaBool(TEXT("meta.isAsyncLoadClass"), true);
+            auto EmitLoadPin = [&](const TCHAR* PinName, EEdGraphPinDirection Direction, const TCHAR* MetaKey)
+            {
+                if (UEdGraphPin* Pin = K2->FindPin(FName(PinName), Direction))
+                {
+                    AddMeta(MetaKey, Pin->PinId.ToString());
+                    AddMeta(FString(MetaKey) + TEXT("Type"), DescribePinTypeDetailed(Pin->PinType));
+                    if (!Pin->DefaultValue.IsEmpty())
+                        AddMeta(FString(MetaKey) + TEXT("Default"), Pin->DefaultValue);
+                    if (Pin->DefaultObject)
+                        AddMeta(FString(MetaKey) + TEXT("DefaultObject"), Pin->DefaultObject->GetPathName());
+                }
+            };
+            EmitLoadPin(TEXT("execute"), EGPD_Input, TEXT("meta.asyncLoadExecutePinId"));
+            EmitLoadPin(TEXT("AssetClass"), EGPD_Input, TEXT("meta.asyncLoadAssetClassPinId"));
+            EmitLoadPin(TEXT("then"), EGPD_Output, TEXT("meta.asyncLoadThenPinId"));
+            EmitLoadPin(TEXT("Completed"), EGPD_Output, TEXT("meta.asyncLoadCompletedPinId"));
+            EmitLoadPin(TEXT("Class"), EGPD_Output, TEXT("meta.asyncLoadResultClassPinId"));
         }
 
         // --- Task 51: MultiGate — distributes execution across multiple output exec pins ---
@@ -6204,6 +6529,23 @@ TSharedPtr<FJsonObject> UBlueprintAnalyzer::BlueprintDataToJsonObject(const FBS_
 		VarObj->SetBoolField(TEXT("isEditable"), VarInfo.bIsEditable);
 		VarObj->SetStringField(TEXT("replicationCondition"), VarInfo.RepCondition);
 		VarObj->SetStringField(TEXT("repNotifyFunction"), VarInfo.RepNotifyFunction);
+		VarObj->SetStringField(TEXT("descriptorPropertyFlags"), VarInfo.DescriptorPropertyFlags);
+		VarObj->SetBoolField(TEXT("descriptorHasNetFlag"), VarInfo.bDescriptorHasNetFlag);
+		VarObj->SetBoolField(TEXT("descriptorHasRepNotifyFlag"), VarInfo.bDescriptorHasRepNotifyFlag);
+		VarObj->SetNumberField(TEXT("descriptorReplicationConditionValue"), VarInfo.DescriptorReplicationConditionValue);
+		VarObj->SetStringField(TEXT("replicationConditionSource"), VarInfo.ReplicationConditionSource);
+		VarObj->SetBoolField(TEXT("compiledPropertyFound"), VarInfo.bCompiledPropertyFound);
+		if (VarInfo.bCompiledPropertyFound)
+		{
+			VarObj->SetStringField(TEXT("compiledPropertyPath"), VarInfo.CompiledPropertyPath);
+			VarObj->SetStringField(TEXT("compiledPropertyFlags"), VarInfo.CompiledPropertyFlags);
+			VarObj->SetBoolField(TEXT("compiledHasNetFlag"), VarInfo.bCompiledHasNetFlag);
+			VarObj->SetBoolField(TEXT("compiledHasRepNotifyFlag"), VarInfo.bCompiledHasRepNotifyFlag);
+			VarObj->SetStringField(TEXT("compiledRepNotifyFunction"), VarInfo.CompiledRepNotifyFunction);
+			VarObj->SetNumberField(TEXT("compiledRepIndex"), VarInfo.CompiledRepIndex);
+		}
+		VarObj->SetStringField(TEXT("replicationDecisionSource"), VarInfo.ReplicationDecisionSource);
+		VarObj->SetBoolField(TEXT("replicationMetadataConsistent"), VarInfo.bReplicationMetadataConsistent);
 		VarObj->SetStringField(TEXT("typeCategory"), VarInfo.TypeCategory);
 		VarObj->SetStringField(TEXT("typeSubCategory"), VarInfo.TypeSubCategory);
 		VarObj->SetStringField(TEXT("typeObjectPath"), VarInfo.TypeObjectPath);
@@ -6448,6 +6790,89 @@ TSharedPtr<FJsonObject> UBlueprintAnalyzer::BlueprintDataToJsonObject(const FBS_
 	}
 	JsonObject->SetArrayField(TEXT("timelines"), TimelineArray);
 
+	TSharedPtr<FJsonObject> WidgetBlueprintObj = MakeShareable(new FJsonObject);
+	WidgetBlueprintObj->SetBoolField(TEXT("isWidgetBlueprint"), Data.WidgetBlueprint.bIsWidgetBlueprint);
+	WidgetBlueprintObj->SetBoolField(TEXT("hasSourceWidgetTree"), Data.WidgetBlueprint.bHasSourceWidgetTree);
+	if (!Data.WidgetBlueprint.WidgetTreePath.IsEmpty())
+		WidgetBlueprintObj->SetStringField(TEXT("widgetTreePath"), Data.WidgetBlueprint.WidgetTreePath);
+	if (!Data.WidgetBlueprint.RootWidgetName.IsEmpty())
+		WidgetBlueprintObj->SetStringField(TEXT("rootWidgetName"), Data.WidgetBlueprint.RootWidgetName);
+	WidgetBlueprintObj->SetArrayField(TEXT("namedSlotBindings"), BuildStringArray(Data.WidgetBlueprint.NamedSlotBindings));
+	WidgetBlueprintObj->SetArrayField(TEXT("generatedNamedSlots"), BuildStringArray(Data.WidgetBlueprint.GeneratedNamedSlots));
+
+	TArray<TSharedPtr<FJsonValue>> WidgetTemplateArray;
+	for (const FBS_WidgetTemplateData& Widget : Data.WidgetBlueprint.Widgets)
+	{
+		TSharedPtr<FJsonObject> WidgetObj = MakeShareable(new FJsonObject);
+		WidgetObj->SetStringField(TEXT("name"), Widget.WidgetName);
+		WidgetObj->SetStringField(TEXT("path"), Widget.WidgetPath);
+		WidgetObj->SetStringField(TEXT("classPath"), Widget.WidgetClassPath);
+		if (!Widget.ParentWidgetName.IsEmpty())
+			WidgetObj->SetStringField(TEXT("parentName"), Widget.ParentWidgetName);
+		if (!Widget.ParentWidgetPath.IsEmpty())
+			WidgetObj->SetStringField(TEXT("parentPath"), Widget.ParentWidgetPath);
+		WidgetObj->SetNumberField(TEXT("childIndex"), Widget.ChildIndex);
+		WidgetObj->SetNumberField(TEXT("depth"), Widget.Depth);
+		if (!Widget.SlotPath.IsEmpty())
+			WidgetObj->SetStringField(TEXT("slotPath"), Widget.SlotPath);
+		if (!Widget.SlotClassPath.IsEmpty())
+			WidgetObj->SetStringField(TEXT("slotClassPath"), Widget.SlotClassPath);
+		if (!Widget.NamedSlotName.IsEmpty())
+			WidgetObj->SetStringField(TEXT("namedSlotName"), Widget.NamedSlotName);
+		AddSortedStringMap(WidgetObj, TEXT("properties"), Widget.WidgetProperties);
+		AddSortedStringMap(WidgetObj, TEXT("slotProperties"), Widget.SlotProperties);
+		WidgetObj->SetArrayField(TEXT("referencedObjectPaths"), BuildStringArray(Widget.ReferencedObjectPaths));
+		WidgetTemplateArray.Add(MakeShareable(new FJsonValueObject(WidgetObj)));
+	}
+	WidgetBlueprintObj->SetArrayField(TEXT("widgets"), WidgetTemplateArray);
+
+	TArray<TSharedPtr<FJsonValue>> WidgetBindingArray;
+	for (const FBS_WidgetBindingData& Binding : Data.WidgetBlueprint.Bindings)
+	{
+		TSharedPtr<FJsonObject> BindingObj = MakeShareable(new FJsonObject);
+		BindingObj->SetStringField(TEXT("objectName"), Binding.ObjectName);
+		BindingObj->SetStringField(TEXT("propertyName"), Binding.PropertyName);
+		BindingObj->SetStringField(TEXT("functionName"), Binding.FunctionName);
+		BindingObj->SetStringField(TEXT("sourceProperty"), Binding.SourceProperty);
+		BindingObj->SetStringField(TEXT("sourcePath"), Binding.SourcePath);
+		BindingObj->SetStringField(TEXT("memberGuid"), Binding.MemberGuid);
+		BindingObj->SetStringField(TEXT("kind"), Binding.BindingKind);
+		WidgetBindingArray.Add(MakeShareable(new FJsonValueObject(BindingObj)));
+	}
+	WidgetBlueprintObj->SetArrayField(TEXT("bindings"), WidgetBindingArray);
+
+	TArray<TSharedPtr<FJsonValue>> WidgetAnimationArray;
+	for (const FBS_WidgetAnimationData& Animation : Data.WidgetBlueprint.Animations)
+	{
+		TSharedPtr<FJsonObject> AnimationObj = MakeShareable(new FJsonObject);
+		AnimationObj->SetStringField(TEXT("name"), Animation.AnimationName);
+		AnimationObj->SetStringField(TEXT("path"), Animation.AnimationPath);
+		AnimationObj->SetStringField(TEXT("movieScenePath"), Animation.MovieScenePath);
+		AnimationObj->SetStringField(TEXT("playbackRange"), Animation.PlaybackRange);
+		AnimationObj->SetStringField(TEXT("tickResolution"), Animation.TickResolution);
+		AnimationObj->SetStringField(TEXT("displayRate"), Animation.DisplayRate);
+		AnimationObj->SetArrayField(TEXT("masterTracks"), BuildStringArray(Animation.MasterTracks));
+		AnimationObj->SetArrayField(TEXT("movieSceneBindings"), BuildStringArray(Animation.MovieSceneBindings));
+		AnimationObj->SetArrayField(TEXT("referencedObjectPaths"), BuildStringArray(Animation.ReferencedObjectPaths));
+		AddSortedStringMap(AnimationObj, TEXT("properties"), Animation.AnimationProperties);
+		AddSortedStringMap(AnimationObj, TEXT("movieSceneProperties"), Animation.MovieSceneProperties);
+
+		TArray<TSharedPtr<FJsonValue>> AnimationBindingArray;
+		for (const FBS_WidgetAnimationBindingData& Binding : Animation.WidgetBindings)
+		{
+			TSharedPtr<FJsonObject> BindingObj = MakeShareable(new FJsonObject);
+			BindingObj->SetStringField(TEXT("widgetName"), Binding.WidgetName);
+			BindingObj->SetStringField(TEXT("slotWidgetName"), Binding.SlotWidgetName);
+			BindingObj->SetStringField(TEXT("animationGuid"), Binding.AnimationGuid);
+			BindingObj->SetBoolField(TEXT("isRootWidget"), Binding.bIsRootWidget);
+			AnimationBindingArray.Add(MakeShareable(new FJsonValueObject(BindingObj)));
+		}
+		AnimationObj->SetArrayField(TEXT("widgetBindings"), AnimationBindingArray);
+		WidgetAnimationArray.Add(MakeShareable(new FJsonValueObject(AnimationObj)));
+	}
+	WidgetBlueprintObj->SetArrayField(TEXT("animations"), WidgetAnimationArray);
+	JsonObject->SetObjectField(TEXT("widgetBlueprint"), WidgetBlueprintObj);
+
     if (Data.StructuredGraphsExt.Num() > 0)
     {
         TArray<TSharedPtr<FJsonValue>> GraphsArray;
@@ -6458,6 +6883,14 @@ TSharedPtr<FJsonObject> UBlueprintAnalyzer::BlueprintDataToJsonObject(const FBS_
             TSharedPtr<FJsonObject> GraphObj = MakeShareable(new FJsonObject);
             GraphObj->SetStringField(TEXT("name"), GraphData.GraphName);
             GraphObj->SetStringField(TEXT("graphType"), GraphData.GraphType);
+            if (!GraphData.GraphPath.IsEmpty())
+                GraphObj->SetStringField(TEXT("graphPath"), GraphData.GraphPath);
+            if (!GraphData.ParentGraphPath.IsEmpty())
+                GraphObj->SetStringField(TEXT("parentGraphPath"), GraphData.ParentGraphPath);
+            if (!GraphData.OwningCompositeNodeGuid.IsEmpty())
+                GraphObj->SetStringField(TEXT("owningCompositeNodeGuid"), GraphData.OwningCompositeNodeGuid);
+            GraphObj->SetNumberField(TEXT("graphDepth"), GraphData.GraphDepth);
+            GraphObj->SetBoolField(TEXT("isCollapsedGraph"), GraphData.bIsCollapsedGraph);
             
             // Serialize nodes as proper JSON objects
             TArray<TSharedPtr<FJsonValue>> NodesArray;
@@ -8230,6 +8663,223 @@ void UBlueprintAnalyzer::ExtractTimelineData(UBlueprint* Blueprint, FBS_Blueprin
 	});
 }
 
+void UBlueprintAnalyzer::ExtractWidgetBlueprintData(UBlueprint* Blueprint, FBS_BlueprintData& OutData)
+{
+	UWidgetBlueprint* WidgetBlueprint = Cast<UWidgetBlueprint>(Blueprint);
+	if (!WidgetBlueprint)
+	{
+		return;
+	}
+
+	FBS_WidgetBlueprintData& WidgetData = OutData.WidgetBlueprint;
+	WidgetData.bIsWidgetBlueprint = true;
+
+	UWidgetBlueprintGeneratedClass* GeneratedWidgetClass =
+		Cast<UWidgetBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+	UWidgetTree* WidgetTree = nullptr;
+#if WITH_EDITORONLY_DATA
+	WidgetTree = WidgetBlueprint->WidgetTree;
+	WidgetData.bHasSourceWidgetTree = WidgetTree != nullptr;
+#endif
+	if (!WidgetTree && GeneratedWidgetClass)
+	{
+		WidgetTree = GeneratedWidgetClass->GetWidgetTreeArchetype();
+	}
+
+	if (GeneratedWidgetClass)
+	{
+		for (const FName& NamedSlot : GeneratedWidgetClass->NamedSlots)
+		{
+			WidgetData.GeneratedNamedSlots.Add(NamedSlot.ToString());
+		}
+		WidgetData.GeneratedNamedSlots.Sort();
+	}
+
+	if (WidgetTree)
+	{
+		WidgetData.WidgetTreePath = WidgetTree->GetPathName();
+		WidgetData.RootWidgetName = WidgetTree->RootWidget
+			? WidgetTree->RootWidget->GetName()
+			: FString();
+
+		TMap<const UWidget*, FString> NamedSlotByContent;
+		TArray<FName> NamedSlotNames;
+		WidgetTree->GetSlotNames(NamedSlotNames);
+		NamedSlotNames.Sort([](const FName& A, const FName& B)
+		{
+			return A.LexicalLess(B);
+		});
+		for (const FName& SlotName : NamedSlotNames)
+		{
+			UWidget* Content = WidgetTree->GetContentForSlot(SlotName);
+			const FString ContentPath = Content ? Content->GetPathName() : TEXT("None");
+			WidgetData.NamedSlotBindings.Add(
+				FString::Printf(TEXT("%s=%s"), *SlotName.ToString(), *ContentPath));
+			if (Content)
+			{
+				NamedSlotByContent.Add(Content, SlotName.ToString());
+			}
+		}
+
+		WidgetTree->ForEachWidget([&](UWidget* Widget)
+		{
+			if (!Widget)
+			{
+				return;
+			}
+
+			FBS_WidgetTemplateData TemplateData;
+			TemplateData.WidgetName = Widget->GetName();
+			TemplateData.WidgetPath = Widget->GetPathName();
+			TemplateData.WidgetClassPath = Widget->GetClass()->GetPathName();
+			if (UPanelWidget* Parent = Widget->GetParent())
+			{
+				TemplateData.ParentWidgetName = Parent->GetName();
+				TemplateData.ParentWidgetPath = Parent->GetPathName();
+				TemplateData.ChildIndex = Parent->GetChildIndex(Widget);
+			}
+
+			for (UWidget* Ancestor = Widget->GetParent(); Ancestor; Ancestor = Ancestor->GetParent())
+			{
+				TemplateData.Depth++;
+			}
+
+			if (Widget->Slot)
+			{
+				TemplateData.SlotPath = Widget->Slot->GetPathName();
+				TemplateData.SlotClassPath = Widget->Slot->GetClass()->GetPathName();
+				ExtractObjectProperties(Widget->Slot, TemplateData.SlotProperties);
+			}
+			if (const FString* NamedSlot = NamedSlotByContent.Find(Widget))
+			{
+				TemplateData.NamedSlotName = *NamedSlot;
+			}
+
+			ExtractObjectProperties(Widget, TemplateData.WidgetProperties);
+			TSet<FString> ReferencedPaths;
+			CollectPropertyAssetPaths(TemplateData.WidgetProperties, ReferencedPaths);
+			CollectPropertyAssetPaths(TemplateData.SlotProperties, ReferencedPaths);
+			TemplateData.ReferencedObjectPaths = ReferencedPaths.Array();
+			TemplateData.ReferencedObjectPaths.Sort();
+			for (const FString& ReferencedPath : TemplateData.ReferencedObjectPaths)
+			{
+				OutData.AssetReferences.AddUnique(ReferencedPath);
+			}
+			WidgetData.Widgets.Add(MoveTemp(TemplateData));
+		});
+
+		WidgetData.Widgets.Sort([](const FBS_WidgetTemplateData& A, const FBS_WidgetTemplateData& B)
+		{
+			if (A.Depth != B.Depth)
+			{
+				return A.Depth < B.Depth;
+			}
+			return A.WidgetPath < B.WidgetPath;
+		});
+	}
+
+#if WITH_EDITORONLY_DATA
+	for (const FDelegateEditorBinding& Binding : WidgetBlueprint->Bindings)
+	{
+		FBS_WidgetBindingData BindingData;
+		BindingData.ObjectName = Binding.ObjectName;
+		BindingData.PropertyName = Binding.PropertyName.ToString();
+		BindingData.FunctionName = Binding.FunctionName.ToString();
+		BindingData.SourceProperty = Binding.SourceProperty.ToString();
+		BindingData.SourcePath = Binding.SourcePath.GetDisplayText().ToString();
+		BindingData.MemberGuid = Binding.MemberGuid.ToString();
+		BindingData.BindingKind = Binding.Kind == EBindingKind::Function
+			? TEXT("Function")
+			: TEXT("Property");
+		WidgetData.Bindings.Add(MoveTemp(BindingData));
+	}
+
+	for (UWidgetAnimation* Animation : WidgetBlueprint->Animations)
+	{
+		if (!Animation)
+		{
+			continue;
+		}
+
+		FBS_WidgetAnimationData AnimationData;
+		AnimationData.AnimationName = Animation->GetName();
+		AnimationData.AnimationPath = Animation->GetPathName();
+		ExtractObjectProperties(Animation, AnimationData.AnimationProperties);
+
+		for (const FWidgetAnimationBinding& Binding : Animation->GetBindings())
+		{
+			FBS_WidgetAnimationBindingData BindingData;
+			BindingData.WidgetName = Binding.WidgetName.ToString();
+			BindingData.SlotWidgetName = Binding.SlotWidgetName.ToString();
+			BindingData.AnimationGuid = Binding.AnimationGuid.ToString();
+			BindingData.bIsRootWidget = Binding.bIsRootWidget;
+			AnimationData.WidgetBindings.Add(MoveTemp(BindingData));
+		}
+
+		if (UMovieScene* MovieScene = Animation->GetMovieScene())
+		{
+			AnimationData.MovieScenePath = MovieScene->GetPathName();
+			AnimationData.PlaybackRange = FormatFrameRange(MovieScene->GetPlaybackRange());
+			AnimationData.TickResolution = FormatFrameRate(MovieScene->GetTickResolution());
+			AnimationData.DisplayRate = FormatFrameRate(MovieScene->GetDisplayRate());
+			ExtractObjectProperties(MovieScene, AnimationData.MovieSceneProperties);
+
+			for (UMovieSceneTrack* Track : MovieScene->GetTracks())
+			{
+				if (Track)
+				{
+					AnimationData.MasterTracks.Add(FString::Printf(TEXT("%s|%s"),
+						*Track->GetClass()->GetPathName(), *Track->GetPathName()));
+				}
+			}
+			const UMovieScene* ConstMovieScene = MovieScene;
+			for (const FMovieSceneBinding& Binding : ConstMovieScene->GetBindings())
+			{
+				TArray<FString> Tracks;
+				for (UMovieSceneTrack* Track : Binding.GetTracks())
+				{
+					if (Track)
+					{
+						Tracks.Add(FString::Printf(TEXT("%s@%s"),
+							*Track->GetClass()->GetPathName(), *Track->GetPathName()));
+					}
+				}
+				AnimationData.MovieSceneBindings.Add(FString::Printf(TEXT("%s|%s"),
+					*Binding.GetObjectGuid().ToString(),
+					*FString::Join(Tracks, TEXT(";"))));
+			}
+		}
+
+		AnimationData.MasterTracks.Sort();
+		AnimationData.MovieSceneBindings.Sort();
+		TSet<FString> ReferencedPaths;
+		CollectPropertyAssetPaths(AnimationData.AnimationProperties, ReferencedPaths);
+		CollectPropertyAssetPaths(AnimationData.MovieSceneProperties, ReferencedPaths);
+		AnimationData.ReferencedObjectPaths = ReferencedPaths.Array();
+		AnimationData.ReferencedObjectPaths.Sort();
+		for (const FString& ReferencedPath : AnimationData.ReferencedObjectPaths)
+		{
+			OutData.AssetReferences.AddUnique(ReferencedPath);
+		}
+		WidgetData.Animations.Add(MoveTemp(AnimationData));
+	}
+#endif
+
+	WidgetData.Bindings.Sort([](const FBS_WidgetBindingData& A, const FBS_WidgetBindingData& B)
+	{
+		if (A.ObjectName != B.ObjectName)
+		{
+			return A.ObjectName < B.ObjectName;
+		}
+		return A.PropertyName < B.PropertyName;
+	});
+	WidgetData.Animations.Sort([](const FBS_WidgetAnimationData& A, const FBS_WidgetAnimationData& B)
+	{
+		return A.AnimationPath < B.AnimationPath;
+	});
+	OutData.AssetReferences.Sort();
+}
+
 TArray<FBS_VariableInfo> UBlueprintAnalyzer::ExtractDetailedVariables(UBlueprint* Blueprint)
 {
 	TArray<FBS_VariableInfo> DetailedVars;
@@ -8266,23 +8916,51 @@ TArray<FBS_VariableInfo> UBlueprintAnalyzer::ExtractDetailedVariables(UBlueprint
 		
 		// Variable properties
 		VarInfo.bIsPublic = (VarDesc.PropertyFlags & CPF_DisableEditOnInstance) == 0;
-		VarInfo.bIsReplicated = (VarDesc.ReplicationCondition != COND_None);
+		VarInfo.bIsReplicated = (VarDesc.PropertyFlags & CPF_Net) != 0;
+		VarInfo.DescriptorPropertyFlags = FormatPropertyFlags(
+			static_cast<EPropertyFlags>(VarDesc.PropertyFlags));
+		VarInfo.bDescriptorHasNetFlag = (VarDesc.PropertyFlags & CPF_Net) != 0;
+		VarInfo.bDescriptorHasRepNotifyFlag = (VarDesc.PropertyFlags & CPF_RepNotify) != 0;
+		VarInfo.DescriptorReplicationConditionValue = static_cast<int32>(VarDesc.ReplicationCondition);
+		VarInfo.ReplicationConditionSource = TEXT("FBPVariableDescription.ReplicationCondition");
+
+		UClass* PropertyOwnerClass = Blueprint->GeneratedClass
+			? Blueprint->GeneratedClass
+			: Blueprint->SkeletonGeneratedClass;
+		FProperty* CompiledProperty = PropertyOwnerClass
+			? FindFProperty<FProperty>(PropertyOwnerClass, VarDesc.VarName)
+			: nullptr;
+		if (CompiledProperty)
+		{
+			VarInfo.bCompiledPropertyFound = true;
+			VarInfo.CompiledPropertyPath = CompiledProperty->GetPathName();
+			VarInfo.CompiledPropertyFlags = FormatPropertyFlags(CompiledProperty->GetPropertyFlags());
+			VarInfo.bCompiledHasNetFlag = CompiledProperty->HasAnyPropertyFlags(CPF_Net);
+			VarInfo.bCompiledHasRepNotifyFlag = CompiledProperty->HasAnyPropertyFlags(CPF_RepNotify);
+			VarInfo.CompiledRepNotifyFunction = CompiledProperty->RepNotifyFunc.ToString();
+			VarInfo.CompiledRepIndex = CompiledProperty->RepIndex;
+			VarInfo.bIsReplicated = VarInfo.bCompiledHasNetFlag;
+			VarInfo.ReplicationDecisionSource = TEXT("FProperty.CPF_Net");
+
+			const bool bNotifyNamesAgree =
+				VarDesc.RepNotifyFunc.IsNone() ||
+				CompiledProperty->RepNotifyFunc.IsNone() ||
+				VarDesc.RepNotifyFunc == CompiledProperty->RepNotifyFunc;
+			VarInfo.bReplicationMetadataConsistent =
+				VarInfo.bDescriptorHasNetFlag == VarInfo.bCompiledHasNetFlag &&
+				VarInfo.bDescriptorHasRepNotifyFlag == VarInfo.bCompiledHasRepNotifyFlag &&
+				bNotifyNamesAgree;
+		}
+		else
+		{
+			VarInfo.ReplicationDecisionSource = TEXT("FBPVariableDescription.PropertyFlags.CPF_Net");
+		}
 		VarInfo.bIsExposedOnSpawn = (VarDesc.PropertyFlags & CPF_ExposeOnSpawn) != 0;
 		VarInfo.bIsEditable = (VarDesc.PropertyFlags & CPF_Edit) != 0;
 		
 		// Replication condition
 		VarInfo.RepNotifyFunction = VarDesc.RepNotifyFunc.ToString();
-		switch (VarDesc.ReplicationCondition)
-		{
-		case COND_InitialOnly: VarInfo.RepCondition = TEXT("InitialOnly"); break;
-		case COND_OwnerOnly: VarInfo.RepCondition = TEXT("OwnerOnly"); break;
-		case COND_SkipOwner: VarInfo.RepCondition = TEXT("SkipOwner"); break;
-		case COND_SimulatedOnly: VarInfo.RepCondition = TEXT("SimulatedOnly"); break;
-		case COND_AutonomousOnly: VarInfo.RepCondition = TEXT("AutonomousOnly"); break;
-		case COND_SimulatedOrPhysics: VarInfo.RepCondition = TEXT("SimulatedOrPhysics"); break;
-		case COND_InitialOrOwner: VarInfo.RepCondition = TEXT("InitialOrOwner"); break;
-		default: VarInfo.RepCondition = TEXT("None"); break;
-		}
+		VarInfo.RepCondition = DescribeLifetimeCondition(VarDesc.ReplicationCondition);
 
 		TSet<FString> Specifiers;
 		// CR-029: edit/visible specifiers — prefer the most specific one.

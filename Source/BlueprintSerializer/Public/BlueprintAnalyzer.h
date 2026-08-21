@@ -67,6 +67,51 @@ struct BLUEPRINTSERIALIZER_API FBS_VariableInfo
 	UPROPERTY()
 	FString RepNotifyFunction;
 
+	// Exact replication provenance. `ReplicationCondition == COND_None` does not
+	// distinguish an ordinary replicated property from a non-replicated property,
+	// so consumers must be able to inspect the source flags used for the decision.
+	UPROPERTY()
+	FString DescriptorPropertyFlags;
+
+	UPROPERTY()
+	bool bDescriptorHasNetFlag = false;
+
+	UPROPERTY()
+	bool bDescriptorHasRepNotifyFlag = false;
+
+	UPROPERTY()
+	int32 DescriptorReplicationConditionValue = 0;
+
+	UPROPERTY()
+	FString ReplicationConditionSource;
+
+	UPROPERTY()
+	bool bCompiledPropertyFound = false;
+
+	UPROPERTY()
+	FString CompiledPropertyPath;
+
+	UPROPERTY()
+	FString CompiledPropertyFlags;
+
+	UPROPERTY()
+	bool bCompiledHasNetFlag = false;
+
+	UPROPERTY()
+	bool bCompiledHasRepNotifyFlag = false;
+
+	UPROPERTY()
+	FString CompiledRepNotifyFunction;
+
+	UPROPERTY()
+	int32 CompiledRepIndex = INDEX_NONE;
+
+	UPROPERTY()
+	FString ReplicationDecisionSource;
+
+	UPROPERTY()
+	bool bReplicationMetadataConsistent = true;
+
 	UPROPERTY()
 	FString TypeCategory;
 
@@ -617,6 +662,11 @@ struct BLUEPRINTSERIALIZER_API FBS_GraphData_Ext
 
     UPROPERTY() FString GraphName;
     UPROPERTY() FString GraphType;
+    UPROPERTY() FString GraphPath;
+    UPROPERTY() FString ParentGraphPath;
+    UPROPERTY() FString OwningCompositeNodeGuid;
+    UPROPERTY() int32 GraphDepth = 0;
+    UPROPERTY() bool bIsCollapsedGraph = false;
     UPROPERTY() TArray<FBS_NodeData> Nodes;
     UPROPERTY() TArray<FBS_FlowEdge> Execution;
     UPROPERTY() TArray<FBS_PinLinkData> DataLinks;
@@ -624,6 +674,91 @@ struct BLUEPRINTSERIALIZER_API FBS_GraphData_Ext
     //          and FunctionResult inputs (graph data outputs)
     UPROPERTY() TArray<FString> GraphInputPins;
     UPROPERTY() TArray<FString> GraphOutputPins;
+};
+
+/** One authored widget template plus its hierarchy and layout slot evidence. */
+USTRUCT(BlueprintType)
+struct BLUEPRINTSERIALIZER_API FBS_WidgetTemplateData
+{
+    GENERATED_BODY()
+
+    UPROPERTY() FString WidgetName;
+    UPROPERTY() FString WidgetPath;
+    UPROPERTY() FString WidgetClassPath;
+    UPROPERTY() FString ParentWidgetName;
+    UPROPERTY() FString ParentWidgetPath;
+    UPROPERTY() int32 ChildIndex = INDEX_NONE;
+    UPROPERTY() int32 Depth = 0;
+    UPROPERTY() FString SlotPath;
+    UPROPERTY() FString SlotClassPath;
+    UPROPERTY() FString NamedSlotName;
+    UPROPERTY() TMap<FString, FString> WidgetProperties;
+    UPROPERTY() TMap<FString, FString> SlotProperties;
+    UPROPERTY() TArray<FString> ReferencedObjectPaths;
+};
+
+/** An editor-authored UMG property/function binding. */
+USTRUCT(BlueprintType)
+struct BLUEPRINTSERIALIZER_API FBS_WidgetBindingData
+{
+    GENERATED_BODY()
+
+    UPROPERTY() FString ObjectName;
+    UPROPERTY() FString PropertyName;
+    UPROPERTY() FString FunctionName;
+    UPROPERTY() FString SourceProperty;
+    UPROPERTY() FString SourcePath;
+    UPROPERTY() FString MemberGuid;
+    UPROPERTY() FString BindingKind;
+};
+
+/** A widget binding inside one UWidgetAnimation. */
+USTRUCT(BlueprintType)
+struct BLUEPRINTSERIALIZER_API FBS_WidgetAnimationBindingData
+{
+    GENERATED_BODY()
+
+    UPROPERTY() FString WidgetName;
+    UPROPERTY() FString SlotWidgetName;
+    UPROPERTY() FString AnimationGuid;
+    UPROPERTY() bool bIsRootWidget = false;
+};
+
+/** Authored UMG animation and MovieScene topology. */
+USTRUCT(BlueprintType)
+struct BLUEPRINTSERIALIZER_API FBS_WidgetAnimationData
+{
+    GENERATED_BODY()
+
+    UPROPERTY() FString AnimationName;
+    UPROPERTY() FString AnimationPath;
+    UPROPERTY() FString MovieScenePath;
+    UPROPERTY() FString PlaybackRange;
+    UPROPERTY() FString TickResolution;
+    UPROPERTY() FString DisplayRate;
+    UPROPERTY() TArray<FString> MasterTracks;
+    UPROPERTY() TArray<FString> MovieSceneBindings;
+    UPROPERTY() TArray<FBS_WidgetAnimationBindingData> WidgetBindings;
+    UPROPERTY() TMap<FString, FString> AnimationProperties;
+    UPROPERTY() TMap<FString, FString> MovieSceneProperties;
+    UPROPERTY() TArray<FString> ReferencedObjectPaths;
+};
+
+/** WidgetBlueprint-only reconstruction evidence. */
+USTRUCT(BlueprintType)
+struct BLUEPRINTSERIALIZER_API FBS_WidgetBlueprintData
+{
+    GENERATED_BODY()
+
+    UPROPERTY() bool bIsWidgetBlueprint = false;
+    UPROPERTY() bool bHasSourceWidgetTree = false;
+    UPROPERTY() FString WidgetTreePath;
+    UPROPERTY() FString RootWidgetName;
+    UPROPERTY() TArray<FBS_WidgetTemplateData> Widgets;
+    UPROPERTY() TArray<FString> NamedSlotBindings;
+    UPROPERTY() TArray<FString> GeneratedNamedSlots;
+    UPROPERTY() TArray<FBS_WidgetBindingData> Bindings;
+    UPROPERTY() TArray<FBS_WidgetAnimationData> Animations;
 };
 
 /**
@@ -1056,6 +1191,9 @@ struct BLUEPRINTSERIALIZER_API FBS_BlueprintData
 
 	UPROPERTY()
 	TArray<FBS_TimelineData> Timelines;
+
+	UPROPERTY()
+	FBS_WidgetBlueprintData WidgetBlueprint;
 	
 	// Legacy simple arrays (for backward compatibility)
 	UPROPERTY()
@@ -1219,6 +1357,7 @@ private:
 	static void ExtractClassParityData(UBlueprint* Blueprint, FBS_BlueprintData& OutData);
 	static void ExtractUserTypeSchemas(UBlueprint* Blueprint, FBS_BlueprintData& OutData);
 	static void ExtractTimelineData(UBlueprint* Blueprint, FBS_BlueprintData& OutData);
+	static void ExtractWidgetBlueprintData(UBlueprint* Blueprint, FBS_BlueprintData& OutData);
 	
 	/**
 	 * Extract graph node information from Blueprint (legacy)

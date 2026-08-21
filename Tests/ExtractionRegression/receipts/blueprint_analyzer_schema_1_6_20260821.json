@@ -1,0 +1,77 @@
+{
+  "schema": "blueprintserializer-extraction-regression-receipt-v1",
+  "generatedAtUtc": "2026-08-21T12:40:19Z",
+  "sourceBaseCommit": "8ee1845",
+  "analyzerSchemaVersion": "1.6",
+  "sourceFiles": [
+    "Source/BlueprintSerializer/BlueprintSerializer.Build.cs",
+    "Source/BlueprintSerializer/Private/BlueprintAnalyzer.cpp",
+    "Source/BlueprintSerializer/Public/BlueprintAnalyzer.h"
+  ],
+  "builds": [
+    {
+      "engine": "5.6",
+      "host": "RunUAT BuildPlugin isolated host",
+      "result": "pass",
+      "dllBytes": 2034176,
+      "dllSha256": "2E57105379444123F4077A1B9CC7375C54981EC7C33881265713079288944480"
+    },
+    {
+      "engine": "5.7",
+      "host": "RunUAT BuildPlugin isolated host",
+      "result": "pass",
+      "dllBytes": 1831424,
+      "dllSha256": "3030A4E4FACB501C3639EB8910E0F52FF70F50FBB5DCC9668E7873563E3D1C10"
+    }
+  ],
+  "loopA": {
+    "engine": "5.6",
+    "host": "isolated Lyra host with local Saved and Intermediate",
+    "suitePass": true,
+    "failureCount": 0,
+    "freshBlueprintExports": 485,
+    "failedBlueprintExports": 0,
+    "schemaVersionCounts": {
+      "1.6": 485
+    },
+    "validationOverallPass": true,
+    "requiredGateCount": 14,
+    "passingGateCount": 14,
+    "variablesTotal": 3133,
+    "functionsTotal": 936,
+    "componentsTotal": 818,
+    "animSequenceAssetsTotal": 584,
+    "loadedAnimSequences": 584,
+    "animSequenceLoadFailures": 0,
+    "suiteReportSha256": "D3C1872AEAB7EDC1B73C230BE3564CB09B78833D98D8AA7248207D5CB42B3717",
+    "validationReportSha256": "805951967FB97A24C9BFA07F526C88E0BB49B52CBDD3BF8C97331EAC10747115",
+    "curveAuditReportSha256": "BBF223046A62B101A5632F1FD50821EB1579D76C2E2C18D42BA2D4BE26328869",
+    "manifestSha256": "631548CB73E7DEFAE04E74E0C5698C4068362202C511A108EE8456CE9AEB4C86",
+    "runLogSha256": "F791DDF5B63CD058EE762BE2BC841B2514B406C8198C7EC8DB93791B6F65A3A0"
+  },
+  "gapRegressionMetrics": {
+    "collapsedGraphsEmitted": 103,
+    "assetsWithCollapsedGraphs": 34,
+    "compiledNetProperties": 25,
+    "compiledRepNotifyProperties": 5,
+    "replicationMetadataContradictions": 0
+  },
+  "umgSmoke": {
+    "assetPath": "/Game/UI/Credits/W_Credits.W_Credits",
+    "engine": "5.6",
+    "isWidgetBlueprint": true,
+    "hasSourceWidgetTree": true,
+    "widgetCount": 14,
+    "bindingCount": 0,
+    "animationCount": 0,
+    "exportSha256": "C7EF6FD394C3C2DC7E362F955B7E51CF7405E9A2B118C6EDB29505EFA6485FF9",
+    "runLogSha256": "7AC0180990FD216C04EECC4DB1169FFDD4C7E7B8DE8808A770F2C7779F1CD188",
+    "sourceAssetSha256Before": "08FDABDAF04A10EB0C64400A785215D8D5032D998E888DC5F42F26E796CDF49A",
+    "sourceAssetSha256After": "08FDABDAF04A10EB0C64400A785215D8D5032D998E888DC5F42F26E796CDF49A"
+  },
+  "limitations": [
+    "The UE 5.8 package build was not run because UE 5.8 rejects the installed MSVC 19.50.35721 toolchain as banned.",
+    "Horror Engine Reading_WB was therefore not re-exported by this receipt.",
+    "This receipt proves extraction/build regression only; it is not gameplay, PIE, multiplayer, reconstruction, or C++ implementation proof."
+  ]
+}

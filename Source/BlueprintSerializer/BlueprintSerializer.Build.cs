@@ -47,6 +47,9 @@ public class BlueprintSerializer : ModuleRules
 				"ControlRigDeveloper",
 				"RigVM",
 				"RigVMDeveloper",
+				"UMG",
+				"UMGEditor",
+				"MovieScene",
 				// Task 33-50: node handlers requiring external module headers
 				"GameplayAbilitiesEditor",   // K2Node_LatentAbilityCall
 				"GameplayTasksEditor",       // K2Node_LatentGameplayTaskCall
