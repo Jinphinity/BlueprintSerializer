@@ -79,6 +79,12 @@ static FAutoConsoleCommand ExportMultipleBlueprintsCommand(
     FConsoleCommandWithArgsDelegate::CreateStatic(&FBlueprintExtractorCommands::ExportMultipleBlueprints)
 );
 
+static FAutoConsoleCommand ExportBlueprintsFromManifestCommand(
+    TEXT("BP_SLZR.ExportBlueprintsFromManifest"),
+    TEXT("Export exact Blueprint object paths from a line manifest. Usage: BP_SLZR.ExportBlueprintsFromManifest <ManifestFile> [OutputDir]. Argument paths must not contain whitespace."),
+    FConsoleCommandWithArgsDelegate::CreateStatic(&FBlueprintExtractorCommands::ExportBlueprintsFromManifest)
+);
+
 static FAutoConsoleCommand ValidateConverterReadyCommand(
     TEXT("BP_SLZR.ValidateConverterReady"),
     TEXT("Validate converter-ready export gates. Usage: BP_SLZR.ValidateConverterReady [ExportDir] [ReportPath]"),
@@ -109,6 +115,7 @@ void FBlueprintExtractorCommands::RegisterCommands()
     UE_LOG(LogTemp, Log, TEXT("  ✅ BP_SLZR.AnalyzeBlueprint <path> - SAFE: Analyze specific Blueprint"));
     UE_LOG(LogTemp, Log, TEXT("  ✅ BP_SLZR.ExportSingleBlueprint <path> - RECOMMENDED: Export single Blueprint to JSON"));
     UE_LOG(LogTemp, Log, TEXT("  ✅ BP_SLZR.ExportMultipleBlueprints <paths...> - RECOMMENDED: Export multiple Blueprints"));
+    UE_LOG(LogTemp, Log, TEXT("  ✅ BP_SLZR.ExportBlueprintsFromManifest <file> [dir] - Export an ordered exact-path batch"));
     UE_LOG(LogTemp, Log, TEXT("  ✅ BP_SLZR.ValidateConverterReady [dir] [report] - Run converter gate checks"));
     UE_LOG(LogTemp, Log, TEXT("  ✅ BP_SLZR.AuditAnimationCurves [report] - Audit AnimSequence curve corpus"));
     UE_LOG(LogTemp, Log, TEXT("  ✅ BP_SLZR.RunRegressionSuite [dir] [skipExport] - Export+validate+curve audit"));
@@ -492,6 +499,424 @@ void FBlueprintExtractorCommands::ExportMultipleBlueprints(const TArray<FString>
         GEngine->AddOnScreenDebugMessage(-1, 10.0f, 
             SuccessCount > 0 ? FColor::Green : FColor::Red,
             FString::Printf(TEXT("Exported %d/%d Blueprints"), SuccessCount, Args.Num()));
+    }
+#else
+    UE_LOG(LogTemp, Warning, TEXT("Blueprint extraction only available in editor builds"));
+#endif
+}
+
+void FBlueprintExtractorCommands::ExportBlueprintsFromManifest(const TArray<FString>& Args)
+{
+#if WITH_EDITOR
+    if (Args.Num() == 0 || Args.Num() > 2)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Usage: BP_SLZR.ExportBlueprintsFromManifest <ManifestFile> [OutputDir]"));
+        UE_LOG(LogTemp, Warning, TEXT("Manifest format: Unreal auto-detected text with one exact Blueprint object path per line; blank lines and lines beginning with # are ignored."));
+        UE_LOG(LogTemp, Warning, TEXT("The command accepts at most two whitespace-tokenized console arguments; ManifestFile and OutputDir must not contain whitespace."));
+        return;
+    }
+
+    auto CleanConsolePathArgument = [](const FString& Argument) -> FString
+    {
+        FString Cleaned = Argument;
+        int32 SemicolonIndex;
+        if (Cleaned.FindChar(';', SemicolonIndex))
+        {
+            Cleaned = Cleaned.Left(SemicolonIndex);
+        }
+        Cleaned.TrimStartAndEndInline();
+        if (Cleaned.Len() >= 2 && Cleaned.StartsWith(TEXT("\"")) && Cleaned.EndsWith(TEXT("\"")))
+        {
+            Cleaned = Cleaned.Mid(1, Cleaned.Len() - 2);
+        }
+        return Cleaned;
+    };
+
+    auto ResolveProjectPath = [](const FString& Path) -> FString
+    {
+        FString Resolved = Path;
+        if (FPaths::IsRelative(Resolved))
+        {
+            Resolved = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), Resolved);
+        }
+        else
+        {
+            Resolved = FPaths::ConvertRelativePathToFull(Resolved);
+        }
+        FPaths::NormalizeFilename(Resolved);
+        FPaths::CollapseRelativeDirectories(Resolved);
+        return Resolved;
+    };
+
+    const FString SourceManifestPath = ResolveProjectPath(CleanConsolePathArgument(Args[0]));
+    FString ExportDir;
+    if (Args.Num() > 1)
+    {
+        ExportDir = CleanConsolePathArgument(Args[1]);
+    }
+    if (ExportDir.IsEmpty())
+    {
+        ExportDir = FPaths::Combine(
+            FPaths::ProjectSavedDir(),
+            TEXT("BlueprintExports"),
+            FString::Printf(TEXT("BP_SLZR_ManifestBatch_%s"), *UDataExportManager::GetTimestamp()));
+    }
+    ExportDir = ResolveProjectPath(ExportDir);
+
+    IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+    const FString ResultManifestPath = FPaths::Combine(ExportDir, TEXT("BP_SLZR_BatchManifest.json"));
+    if (!PlatformFile.DirectoryExists(*ExportDir) && !PlatformFile.CreateDirectoryTree(*ExportDir))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Could not create manifest batch output directory: %s"), *ExportDir);
+        UE_LOG(LogTemp, Error, TEXT("BP_SLZR_MANIFEST_BATCH_RESULT overallStatus=failed complete=false allSucceeded=false requested=0 unique=0 duplicates=0 success=0 failed=0 checkpointWriteFailures=0 manifestSaved=false manifest=%s fatal=output_directory_create_failed"), *ResultManifestPath);
+        return;
+    }
+
+    TSharedPtr<FJsonObject> BatchManifest = MakeShareable(new FJsonObject);
+    BatchManifest->SetStringField(TEXT("schemaVersion"), TEXT("bp-slzr-blueprint-batch-manifest/v1"));
+    BatchManifest->SetStringField(TEXT("command"), TEXT("BP_SLZR.ExportBlueprintsFromManifest"));
+    BatchManifest->SetStringField(TEXT("sourceManifestFormat"), TEXT("unreal-autodetected-text-lines-v1"));
+    BatchManifest->SetStringField(TEXT("commentSyntax"), TEXT("lines whose first non-whitespace character is #"));
+    BatchManifest->SetStringField(TEXT("argumentContract"), TEXT("manifest_path_then_optional_output_directory; maximum_two_whitespace_tokenized_arguments; manifest_and_output_paths_must_not_contain_whitespace"));
+    BatchManifest->SetStringField(TEXT("sourceManifestPath"), SourceManifestPath);
+    BatchManifest->SetStringField(TEXT("exportDirectory"), ExportDir);
+    BatchManifest->SetStringField(TEXT("dedupePolicy"), TEXT("first_occurrence_exact_case_sensitive_after_trim"));
+    BatchManifest->SetStringField(TEXT("failurePolicy"), TEXT("continue_ordinary_object_failures"));
+    BatchManifest->SetStringField(TEXT("checkpointPolicy"), TEXT("overwrite_fixed_manifest_after_each_object_result"));
+    BatchManifest->SetStringField(TEXT("identityAlgorithm"), TEXT("sha256_lowercase_hex_of_exact_file_bytes"));
+    BatchManifest->SetStringField(TEXT("outputIdentityPolicy"), TEXT("post_save_exact_file_read; success requires actual path, byte count, and SHA-256"));
+    BatchManifest->SetBoolField(TEXT("byteDeterministic"), false);
+    BatchManifest->SetStringField(TEXT("byteDeterminismClaim"), TEXT("none"));
+    BatchManifest->SetStringField(TEXT("timestampPolicy"), TEXT("completedAtUtc plus exporter timestamps and timestamped filenames are wall-clock observations; SHA-256 fields bind observed bytes and do not claim reproducible artifact bytes"));
+
+    auto SaveBatchManifest = [&BatchManifest, &ResultManifestPath](const bool bLogSuccess) -> bool
+    {
+        FString ManifestJson;
+        TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ManifestJson);
+        if (!FJsonSerializer::Serialize(BatchManifest.ToSharedRef(), Writer))
+        {
+            UE_LOG(LogTemp, Error, TEXT("Could not serialize batch result manifest: %s"), *ResultManifestPath);
+            return false;
+        }
+        if (!FFileHelper::SaveStringToFile(ManifestJson, *ResultManifestPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+        {
+            UE_LOG(LogTemp, Error, TEXT("Could not save batch result manifest: %s"), *ResultManifestPath);
+            return false;
+        }
+        if (bLogSuccess)
+        {
+            UE_LOG(LogTemp, Log, TEXT("Batch result manifest saved: %s"), *ResultManifestPath);
+        }
+        return true;
+    };
+
+    auto LogFinalSummary = [&ResultManifestPath](
+        const FString& OverallStatus,
+        const bool bComplete,
+        const bool bAllSucceeded,
+        const int32 RequestedCount,
+        const int32 UniqueCount,
+        const int32 DuplicateCount,
+        const int32 SuccessCount,
+        const int32 FailureCount,
+        const int32 CheckpointWriteFailures,
+        const bool bManifestSaved,
+        const FString& FatalError)
+    {
+        UE_LOG(LogTemp, Log, TEXT("BP_SLZR_MANIFEST_BATCH_RESULT overallStatus=%s complete=%s allSucceeded=%s requested=%d unique=%d duplicates=%d success=%d failed=%d checkpointWriteFailures=%d manifestSaved=%s manifest=%s fatal=%s"),
+            *OverallStatus,
+            bComplete ? TEXT("true") : TEXT("false"),
+            bAllSucceeded ? TEXT("true") : TEXT("false"),
+            RequestedCount,
+            UniqueCount,
+            DuplicateCount,
+            SuccessCount,
+            FailureCount,
+            CheckpointWriteFailures,
+            bManifestSaved ? TEXT("true") : TEXT("false"),
+            *ResultManifestPath,
+            FatalError.IsEmpty() ? TEXT("none") : *FatalError);
+    };
+
+    int64 SourceManifestBytes = 0;
+    FString SourceManifestSha256;
+    TArray64<uint8> ExactSourceManifestBytes;
+    const bool bSourceManifestIdentityCaptured = UBlueprintAnalyzer::CaptureFileSha256Identity(
+        SourceManifestPath,
+        SourceManifestBytes,
+        SourceManifestSha256,
+        &ExactSourceManifestBytes);
+    BatchManifest->SetBoolField(TEXT("sourceManifestIdentityCaptured"), bSourceManifestIdentityCaptured);
+    BatchManifest->SetNumberField(TEXT("sourceManifestBytes"), SourceManifestBytes);
+    BatchManifest->SetStringField(TEXT("sourceManifestSha256"), SourceManifestSha256);
+
+    FString SourceManifestText;
+    FString SourceManifestFatalError;
+    if (!bSourceManifestIdentityCaptured)
+    {
+        SourceManifestFatalError = TEXT("source_manifest_read_failed");
+    }
+    else if (ExactSourceManifestBytes.Num() > MAX_int32)
+    {
+        SourceManifestFatalError = TEXT("source_manifest_too_large_for_text_decode");
+    }
+    else
+    {
+        FFileHelper::BufferToString(
+            SourceManifestText,
+            ExactSourceManifestBytes.GetData(),
+            static_cast<int32>(ExactSourceManifestBytes.Num()));
+    }
+
+    if (!SourceManifestFatalError.IsEmpty())
+    {
+        BatchManifest->SetBoolField(TEXT("sourceManifestLoaded"), false);
+        BatchManifest->SetBoolField(TEXT("complete"), false);
+        BatchManifest->SetBoolField(TEXT("allSucceeded"), false);
+        BatchManifest->SetStringField(TEXT("overallStatus"), TEXT("failed"));
+        BatchManifest->SetStringField(TEXT("fatalError"), SourceManifestFatalError);
+        BatchManifest->SetNumberField(TEXT("lineCount"), 0);
+        BatchManifest->SetNumberField(TEXT("requestedPathCount"), 0);
+        BatchManifest->SetNumberField(TEXT("uniquePathCount"), 0);
+        BatchManifest->SetNumberField(TEXT("duplicateCount"), 0);
+        BatchManifest->SetNumberField(TEXT("resultCount"), 0);
+        BatchManifest->SetNumberField(TEXT("ignoredBlankLineCount"), 0);
+        BatchManifest->SetNumberField(TEXT("ignoredCommentLineCount"), 0);
+        BatchManifest->SetNumberField(TEXT("successCount"), 0);
+        BatchManifest->SetNumberField(TEXT("failCount"), 0);
+        BatchManifest->SetNumberField(TEXT("checkpointWriteFailureCount"), 0);
+        BatchManifest->SetArrayField(TEXT("uniqueRequestedPaths"), TArray<TSharedPtr<FJsonValue>>());
+        BatchManifest->SetArrayField(TEXT("duplicates"), TArray<TSharedPtr<FJsonValue>>());
+        BatchManifest->SetArrayField(TEXT("results"), TArray<TSharedPtr<FJsonValue>>());
+        const bool bManifestSaved = SaveBatchManifest(true);
+        LogFinalSummary(TEXT("failed"), false, false, 0, 0, 0, 0, 0, 0, bManifestSaved, SourceManifestFatalError);
+        UE_LOG(LogTemp, Error, TEXT("Could not load exact Blueprint path manifest bytes: %s (%s)"), *SourceManifestPath, *SourceManifestFatalError);
+        return;
+    }
+
+    TArray<FString> ManifestLines;
+    SourceManifestText.ParseIntoArrayLines(ManifestLines, false);
+
+    TMap<FString, int32> FirstOccurrenceLineByPath;
+    TArray<FString> OrderedPaths;
+    TArray<int32> OrderedFirstOccurrenceLines;
+    TArray<TSharedPtr<FJsonValue>> DuplicateEntries;
+    int32 RequestedPathCount = 0;
+    int32 IgnoredBlankLineCount = 0;
+    int32 IgnoredCommentLineCount = 0;
+
+    for (int32 LineIndex = 0; LineIndex < ManifestLines.Num(); ++LineIndex)
+    {
+        FString CleanPath = ManifestLines[LineIndex];
+        CleanPath.TrimStartAndEndInline();
+        const int32 LineNumber = LineIndex + 1;
+        if (CleanPath.IsEmpty())
+        {
+            ++IgnoredBlankLineCount;
+            continue;
+        }
+        if (CleanPath.StartsWith(TEXT("#")))
+        {
+            ++IgnoredCommentLineCount;
+            continue;
+        }
+
+        ++RequestedPathCount;
+        if (const int32* FirstOccurrenceLine = FirstOccurrenceLineByPath.Find(CleanPath))
+        {
+            TSharedPtr<FJsonObject> Duplicate = MakeShareable(new FJsonObject);
+            Duplicate->SetNumberField(TEXT("lineNumber"), LineNumber);
+            Duplicate->SetStringField(TEXT("blueprintPath"), CleanPath);
+            Duplicate->SetNumberField(TEXT("firstOccurrenceLine"), *FirstOccurrenceLine);
+            DuplicateEntries.Add(MakeShareable(new FJsonValueObject(Duplicate)));
+            continue;
+        }
+
+        FirstOccurrenceLineByPath.Add(CleanPath, LineNumber);
+        OrderedPaths.Add(CleanPath);
+        OrderedFirstOccurrenceLines.Add(LineNumber);
+    }
+
+    TArray<TSharedPtr<FJsonValue>> UniqueRequestedPaths;
+    UniqueRequestedPaths.Reserve(OrderedPaths.Num());
+    for (const FString& OrderedPath : OrderedPaths)
+    {
+        UniqueRequestedPaths.Add(MakeShareable(new FJsonValueString(OrderedPath)));
+    }
+
+    if (OrderedPaths.Num() == 0)
+    {
+        BatchManifest->SetBoolField(TEXT("sourceManifestLoaded"), true);
+        BatchManifest->SetBoolField(TEXT("complete"), false);
+        BatchManifest->SetBoolField(TEXT("allSucceeded"), false);
+        BatchManifest->SetStringField(TEXT("overallStatus"), TEXT("failed"));
+        BatchManifest->SetStringField(TEXT("fatalError"), TEXT("source_manifest_contains_no_paths"));
+        BatchManifest->SetNumberField(TEXT("lineCount"), ManifestLines.Num());
+        BatchManifest->SetNumberField(TEXT("requestedPathCount"), RequestedPathCount);
+        BatchManifest->SetNumberField(TEXT("uniquePathCount"), 0);
+        BatchManifest->SetNumberField(TEXT("duplicateCount"), DuplicateEntries.Num());
+        BatchManifest->SetNumberField(TEXT("resultCount"), 0);
+        BatchManifest->SetNumberField(TEXT("ignoredBlankLineCount"), IgnoredBlankLineCount);
+        BatchManifest->SetNumberField(TEXT("ignoredCommentLineCount"), IgnoredCommentLineCount);
+        BatchManifest->SetNumberField(TEXT("successCount"), 0);
+        BatchManifest->SetNumberField(TEXT("failCount"), 0);
+        BatchManifest->SetNumberField(TEXT("checkpointWriteFailureCount"), 0);
+        BatchManifest->SetArrayField(TEXT("uniqueRequestedPaths"), UniqueRequestedPaths);
+        BatchManifest->SetArrayField(TEXT("duplicates"), DuplicateEntries);
+        BatchManifest->SetArrayField(TEXT("results"), TArray<TSharedPtr<FJsonValue>>());
+        const bool bManifestSaved = SaveBatchManifest(true);
+        LogFinalSummary(TEXT("failed"), false, false, RequestedPathCount, 0, DuplicateEntries.Num(), 0, 0, 0, bManifestSaved, TEXT("source_manifest_contains_no_paths"));
+        return;
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("Starting manifest batch: %d unique paths (%d duplicates ignored) from %s"),
+        OrderedPaths.Num(), DuplicateEntries.Num(), *SourceManifestPath);
+
+    TArray<TSharedPtr<FJsonValue>> Results;
+    Results.Reserve(OrderedPaths.Num());
+    int32 SuccessCount = 0;
+    int32 FailCount = 0;
+    int32 CheckpointWriteFailureCount = 0;
+
+    BatchManifest->SetBoolField(TEXT("sourceManifestLoaded"), true);
+    BatchManifest->SetBoolField(TEXT("complete"), false);
+    BatchManifest->SetBoolField(TEXT("allSucceeded"), false);
+    BatchManifest->SetStringField(TEXT("overallStatus"), TEXT("in_progress"));
+    BatchManifest->SetNumberField(TEXT("lineCount"), ManifestLines.Num());
+    BatchManifest->SetNumberField(TEXT("requestedPathCount"), RequestedPathCount);
+    BatchManifest->SetNumberField(TEXT("uniquePathCount"), OrderedPaths.Num());
+    BatchManifest->SetNumberField(TEXT("duplicateCount"), DuplicateEntries.Num());
+    BatchManifest->SetNumberField(TEXT("resultCount"), 0);
+    BatchManifest->SetNumberField(TEXT("nextResultIndex"), 0);
+    BatchManifest->SetNumberField(TEXT("ignoredBlankLineCount"), IgnoredBlankLineCount);
+    BatchManifest->SetNumberField(TEXT("ignoredCommentLineCount"), IgnoredCommentLineCount);
+    BatchManifest->SetNumberField(TEXT("successCount"), 0);
+    BatchManifest->SetNumberField(TEXT("failCount"), 0);
+    BatchManifest->SetNumberField(TEXT("checkpointWriteFailureCount"), 0);
+    BatchManifest->SetArrayField(TEXT("uniqueRequestedPaths"), UniqueRequestedPaths);
+    BatchManifest->SetArrayField(TEXT("duplicates"), DuplicateEntries);
+    BatchManifest->SetArrayField(TEXT("results"), Results);
+    if (!SaveBatchManifest(false))
+    {
+        ++CheckpointWriteFailureCount;
+    }
+
+    auto CheckpointResults = [&]()
+    {
+        BatchManifest->SetNumberField(TEXT("resultCount"), Results.Num());
+        BatchManifest->SetNumberField(TEXT("nextResultIndex"), Results.Num());
+        BatchManifest->SetNumberField(TEXT("successCount"), SuccessCount);
+        BatchManifest->SetNumberField(TEXT("failCount"), FailCount);
+        BatchManifest->SetNumberField(TEXT("checkpointWriteFailureCount"), CheckpointWriteFailureCount);
+        BatchManifest->SetArrayField(TEXT("results"), Results);
+        if (!SaveBatchManifest(false))
+        {
+            ++CheckpointWriteFailureCount;
+        }
+    };
+
+    for (int32 ResultIndex = 0; ResultIndex < OrderedPaths.Num(); ++ResultIndex)
+    {
+        const FString& CleanPath = OrderedPaths[ResultIndex];
+        TSharedPtr<FJsonObject> Result = MakeShareable(new FJsonObject);
+        Result->SetNumberField(TEXT("resultIndex"), ResultIndex);
+        Result->SetNumberField(TEXT("firstOccurrenceLine"), OrderedFirstOccurrenceLines[ResultIndex]);
+        Result->SetStringField(TEXT("blueprintPath"), CleanPath);
+
+        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *CleanPath);
+        if (!Blueprint)
+        {
+            ++FailCount;
+            Result->SetBoolField(TEXT("success"), false);
+            Result->SetStringField(TEXT("status"), TEXT("load_failed"));
+            Result->SetBoolField(TEXT("exportFileSaved"), false);
+            Result->SetBoolField(TEXT("outputIdentityCaptured"), false);
+            Result->SetStringField(TEXT("outputJsonPath"), FString());
+            Result->SetNumberField(TEXT("outputJsonBytes"), 0);
+            Result->SetStringField(TEXT("outputJsonSha256"), FString());
+            Result->SetStringField(TEXT("failureStage"), TEXT("load"));
+            UE_LOG(LogTemp, Warning, TEXT("Could not load manifest Blueprint: %s"), *CleanPath);
+            Results.Add(MakeShareable(new FJsonValueObject(Result)));
+            CheckpointResults();
+            continue;
+        }
+
+        Result->SetStringField(TEXT("assetName"), Blueprint->GetName());
+        const FBS_BlueprintFileExportResult ExportResult = UBlueprintAnalyzer::ExportSingleBlueprintToJSONWithResult(CleanPath, ExportDir);
+        const bool bSuccess = ExportResult.bFileSaved && ExportResult.bOutputIdentityCaptured;
+        const FString ResultStatus = !ExportResult.bFileSaved
+            ? TEXT("export_failed")
+            : (ExportResult.bOutputIdentityCaptured ? TEXT("exported") : TEXT("output_identity_failed"));
+        const FString FailureStage = ExportResult.FailureStage.IsEmpty() ? TEXT("none") : ExportResult.FailureStage;
+        Result->SetBoolField(TEXT("success"), bSuccess);
+        Result->SetStringField(TEXT("status"), ResultStatus);
+        Result->SetBoolField(TEXT("exportFileSaved"), ExportResult.bFileSaved);
+        Result->SetBoolField(TEXT("outputIdentityCaptured"), ExportResult.bOutputIdentityCaptured);
+        Result->SetStringField(TEXT("outputJsonPath"), ExportResult.OutputFilePath);
+        Result->SetNumberField(TEXT("outputJsonBytes"), ExportResult.OutputFileBytes);
+        Result->SetStringField(TEXT("outputJsonSha256"), ExportResult.OutputFileSha256);
+        Result->SetStringField(TEXT("failureStage"), FailureStage);
+        if (bSuccess)
+        {
+            ++SuccessCount;
+        }
+        else
+        {
+            ++FailCount;
+            UE_LOG(LogTemp, Warning, TEXT("Manifest Blueprint export failed: %s (status=%s stage=%s)"),
+                *CleanPath,
+                *ResultStatus,
+                *FailureStage);
+        }
+        Results.Add(MakeShareable(new FJsonValueObject(Result)));
+        CheckpointResults();
+    }
+
+    BatchManifest->SetBoolField(TEXT("sourceManifestLoaded"), true);
+    BatchManifest->SetBoolField(TEXT("complete"), true);
+    const bool bAllObjectAndCheckpointWorkSucceeded = FailCount == 0 && CheckpointWriteFailureCount == 0;
+    BatchManifest->SetBoolField(TEXT("allSucceeded"), bAllObjectAndCheckpointWorkSucceeded);
+    BatchManifest->SetStringField(TEXT("overallStatus"), bAllObjectAndCheckpointWorkSucceeded ? TEXT("passed") : TEXT("completed_with_failures"));
+    BatchManifest->SetStringField(TEXT("completedAtUtc"), FDateTime::UtcNow().ToIso8601());
+    BatchManifest->SetNumberField(TEXT("lineCount"), ManifestLines.Num());
+    BatchManifest->SetNumberField(TEXT("requestedPathCount"), RequestedPathCount);
+    BatchManifest->SetNumberField(TEXT("uniquePathCount"), OrderedPaths.Num());
+    BatchManifest->SetNumberField(TEXT("duplicateCount"), DuplicateEntries.Num());
+    BatchManifest->SetNumberField(TEXT("resultCount"), Results.Num());
+    BatchManifest->SetNumberField(TEXT("nextResultIndex"), Results.Num());
+    BatchManifest->SetNumberField(TEXT("ignoredBlankLineCount"), IgnoredBlankLineCount);
+    BatchManifest->SetNumberField(TEXT("ignoredCommentLineCount"), IgnoredCommentLineCount);
+    BatchManifest->SetNumberField(TEXT("successCount"), SuccessCount);
+    BatchManifest->SetNumberField(TEXT("failCount"), FailCount);
+    BatchManifest->SetNumberField(TEXT("checkpointWriteFailureCount"), CheckpointWriteFailureCount);
+    BatchManifest->SetArrayField(TEXT("uniqueRequestedPaths"), UniqueRequestedPaths);
+    BatchManifest->SetArrayField(TEXT("duplicates"), DuplicateEntries);
+    BatchManifest->SetArrayField(TEXT("results"), Results);
+
+    const bool bManifestSaved = SaveBatchManifest(true);
+    const FString OverallStatus = !bManifestSaved
+        ? TEXT("failed")
+        : (bAllObjectAndCheckpointWorkSucceeded ? TEXT("passed") : TEXT("completed_with_failures"));
+    LogFinalSummary(
+        OverallStatus,
+        true,
+        bAllObjectAndCheckpointWorkSucceeded && bManifestSaved,
+        RequestedPathCount,
+        OrderedPaths.Num(),
+        DuplicateEntries.Num(),
+        SuccessCount,
+        FailCount,
+        CheckpointWriteFailureCount,
+        bManifestSaved,
+        bManifestSaved ? FString() : TEXT("result_manifest_write_failed"));
+
+    if (GEngine)
+    {
+        GEngine->AddOnScreenDebugMessage(
+            -1,
+            10.0f,
+            bAllObjectAndCheckpointWorkSucceeded && bManifestSaved ? FColor::Green : FColor::Yellow,
+            FString::Printf(TEXT("Manifest batch exported %d/%d Blueprints"), SuccessCount, OrderedPaths.Num()));
     }
 #else
     UE_LOG(LogTemp, Warning, TEXT("Blueprint extraction only available in editor builds"));

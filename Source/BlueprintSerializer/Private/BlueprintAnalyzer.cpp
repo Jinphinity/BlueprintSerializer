@@ -404,6 +404,137 @@ namespace
         return FString::Printf(TEXT("%s_%s"), *SafeName, *PathHash);
     }
 
+    uint32 RotateRightSha256(const uint32 Value, const uint32 BitCount)
+    {
+        return (Value >> BitCount) | (Value << (32U - BitCount));
+    }
+
+    void TransformSha256Block(const uint8* Block, uint32 State[8])
+    {
+        static constexpr uint32 RoundConstants[64] =
+        {
+            0x428a2f98U, 0x71374491U, 0xb5c0fbcfU, 0xe9b5dba5U,
+            0x3956c25bU, 0x59f111f1U, 0x923f82a4U, 0xab1c5ed5U,
+            0xd807aa98U, 0x12835b01U, 0x243185beU, 0x550c7dc3U,
+            0x72be5d74U, 0x80deb1feU, 0x9bdc06a7U, 0xc19bf174U,
+            0xe49b69c1U, 0xefbe4786U, 0x0fc19dc6U, 0x240ca1ccU,
+            0x2de92c6fU, 0x4a7484aaU, 0x5cb0a9dcU, 0x76f988daU,
+            0x983e5152U, 0xa831c66dU, 0xb00327c8U, 0xbf597fc7U,
+            0xc6e00bf3U, 0xd5a79147U, 0x06ca6351U, 0x14292967U,
+            0x27b70a85U, 0x2e1b2138U, 0x4d2c6dfcU, 0x53380d13U,
+            0x650a7354U, 0x766a0abbU, 0x81c2c92eU, 0x92722c85U,
+            0xa2bfe8a1U, 0xa81a664bU, 0xc24b8b70U, 0xc76c51a3U,
+            0xd192e819U, 0xd6990624U, 0xf40e3585U, 0x106aa070U,
+            0x19a4c116U, 0x1e376c08U, 0x2748774cU, 0x34b0bcb5U,
+            0x391c0cb3U, 0x4ed8aa4aU, 0x5b9cca4fU, 0x682e6ff3U,
+            0x748f82eeU, 0x78a5636fU, 0x84c87814U, 0x8cc70208U,
+            0x90befffaU, 0xa4506cebU, 0xbef9a3f7U, 0xc67178f2U
+        };
+
+        uint32 Schedule[64];
+        for (int32 WordIndex = 0; WordIndex < 16; ++WordIndex)
+        {
+            const int32 ByteIndex = WordIndex * 4;
+            Schedule[WordIndex] =
+                (static_cast<uint32>(Block[ByteIndex]) << 24U) |
+                (static_cast<uint32>(Block[ByteIndex + 1]) << 16U) |
+                (static_cast<uint32>(Block[ByteIndex + 2]) << 8U) |
+                static_cast<uint32>(Block[ByteIndex + 3]);
+        }
+        for (int32 WordIndex = 16; WordIndex < 64; ++WordIndex)
+        {
+            const uint32 S0 =
+                RotateRightSha256(Schedule[WordIndex - 15], 7U) ^
+                RotateRightSha256(Schedule[WordIndex - 15], 18U) ^
+                (Schedule[WordIndex - 15] >> 3U);
+            const uint32 S1 =
+                RotateRightSha256(Schedule[WordIndex - 2], 17U) ^
+                RotateRightSha256(Schedule[WordIndex - 2], 19U) ^
+                (Schedule[WordIndex - 2] >> 10U);
+            Schedule[WordIndex] = Schedule[WordIndex - 16] + S0 + Schedule[WordIndex - 7] + S1;
+        }
+
+        uint32 A = State[0];
+        uint32 B = State[1];
+        uint32 C = State[2];
+        uint32 D = State[3];
+        uint32 E = State[4];
+        uint32 F = State[5];
+        uint32 G = State[6];
+        uint32 H = State[7];
+
+        for (int32 Round = 0; Round < 64; ++Round)
+        {
+            const uint32 Sum1 = RotateRightSha256(E, 6U) ^ RotateRightSha256(E, 11U) ^ RotateRightSha256(E, 25U);
+            const uint32 Choice = (E & F) ^ ((~E) & G);
+            const uint32 Temp1 = H + Sum1 + Choice + RoundConstants[Round] + Schedule[Round];
+            const uint32 Sum0 = RotateRightSha256(A, 2U) ^ RotateRightSha256(A, 13U) ^ RotateRightSha256(A, 22U);
+            const uint32 Majority = (A & B) ^ (A & C) ^ (B & C);
+            const uint32 Temp2 = Sum0 + Majority;
+
+            H = G;
+            G = F;
+            F = E;
+            E = D + Temp1;
+            D = C;
+            C = B;
+            B = A;
+            A = Temp1 + Temp2;
+        }
+
+        State[0] += A;
+        State[1] += B;
+        State[2] += C;
+        State[3] += D;
+        State[4] += E;
+        State[5] += F;
+        State[6] += G;
+        State[7] += H;
+    }
+
+    FString ComputeSha256Hex(const TArray64<uint8>& Bytes)
+    {
+        uint32 State[8] =
+        {
+            0x6a09e667U, 0xbb67ae85U, 0x3c6ef372U, 0xa54ff53aU,
+            0x510e527fU, 0x9b05688cU, 0x1f83d9abU, 0x5be0cd19U
+        };
+
+        const int64 FullBlockBytes = Bytes.Num() - (Bytes.Num() % 64);
+        for (int64 Offset = 0; Offset < FullBlockBytes; Offset += 64)
+        {
+            TransformSha256Block(Bytes.GetData() + Offset, State);
+        }
+
+        uint8 Tail[128] = {};
+        const int32 TailBytes = static_cast<int32>(Bytes.Num() - FullBlockBytes);
+        if (TailBytes > 0)
+        {
+            FMemory::Memcpy(Tail, Bytes.GetData() + FullBlockBytes, TailBytes);
+        }
+        Tail[TailBytes] = 0x80U;
+
+        const int32 PaddedTailBytes = TailBytes < 56 ? 64 : 128;
+        const uint64 BitLength = static_cast<uint64>(Bytes.Num()) * 8ULL;
+        for (int32 ByteIndex = 0; ByteIndex < 8; ++ByteIndex)
+        {
+            Tail[PaddedTailBytes - 1 - ByteIndex] = static_cast<uint8>(BitLength >> (ByteIndex * 8));
+        }
+        TransformSha256Block(Tail, State);
+        if (PaddedTailBytes == 128)
+        {
+            TransformSha256Block(Tail + 64, State);
+        }
+
+        FString HexDigest;
+        HexDigest.Reserve(64);
+        for (const uint32 Word : State)
+        {
+            HexDigest += FString::Printf(TEXT("%08x"), Word);
+        }
+        return HexDigest;
+    }
+
     TArray<TSharedPtr<FJsonValue>> BuildFloatArray(const TArray<float>& Values)
     {
         TArray<TSharedPtr<FJsonValue>> Result;
@@ -7989,16 +8120,57 @@ bool UBlueprintAnalyzer::SaveBlueprintDataToFile(const FString& JsonData, const 
 	return FFileHelper::SaveStringToFile(JsonData, *FilePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 }
 
+bool UBlueprintAnalyzer::CaptureFileSha256Identity(
+	const FString& FilePath,
+	int64& OutFileBytes,
+	FString& OutFileSha256,
+	TArray64<uint8>* OutExactFileBytes)
+{
+	OutFileBytes = 0;
+	OutFileSha256.Reset();
+	if (OutExactFileBytes)
+	{
+		OutExactFileBytes->Reset();
+	}
+
+	TArray64<uint8> ExactFileBytes;
+	if (!FFileHelper::LoadFileToArray(ExactFileBytes, *FilePath))
+	{
+		return false;
+	}
+
+	OutFileBytes = ExactFileBytes.Num();
+	OutFileSha256 = ComputeSha256Hex(ExactFileBytes);
+	if (OutFileSha256.Len() != 64)
+	{
+		return false;
+	}
+	if (OutExactFileBytes)
+	{
+		*OutExactFileBytes = MoveTemp(ExactFileBytes);
+	}
+	return true;
+}
+
 bool UBlueprintAnalyzer::ExportSingleBlueprintToJSON(const FString& BlueprintPath, const FString& OutputDirectory)
 {
+	return ExportSingleBlueprintToJSONWithResult(BlueprintPath, OutputDirectory).bFileSaved;
+}
+
+FBS_BlueprintFileExportResult UBlueprintAnalyzer::ExportSingleBlueprintToJSONWithResult(
+	const FString& BlueprintPath,
+	const FString& OutputDirectory)
+{
+	FBS_BlueprintFileExportResult Result;
 	UE_LOG(LogTemp, Warning, TEXT("🚀 Starting single Blueprint export for: %s"), *BlueprintPath);
 	
 	// Load the Blueprint
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
 	if (!Blueprint)
 	{
+		Result.FailureStage = TEXT("load");
 		UE_LOG(LogTemp, Error, TEXT("❌ Could not load Blueprint: %s"), *BlueprintPath);
-		return false;
+		return Result;
 	}
 	
 	UE_LOG(LogTemp, Warning, TEXT("✅ Blueprint loaded successfully"));
@@ -8007,8 +8179,9 @@ bool UBlueprintAnalyzer::ExportSingleBlueprintToJSON(const FString& BlueprintPat
 	FBS_BlueprintData BlueprintData = AnalyzeBlueprint(Blueprint);
 	if (BlueprintData.BlueprintName.IsEmpty())
 	{
+		Result.FailureStage = TEXT("analysis");
 		UE_LOG(LogTemp, Error, TEXT("❌ Blueprint analysis failed"));
-		return false;
+		return Result;
 	}
 	
 	UE_LOG(LogTemp, Warning, TEXT("📊 Blueprint analyzed: %d nodes, %d variables, %d functions"), 
@@ -8018,8 +8191,9 @@ bool UBlueprintAnalyzer::ExportSingleBlueprintToJSON(const FString& BlueprintPat
 	FString JsonData = ExportBlueprintDataToJSON(BlueprintData);
 	if (JsonData.IsEmpty())
 	{
+		Result.FailureStage = TEXT("json_conversion");
 		UE_LOG(LogTemp, Error, TEXT("❌ JSON conversion failed"));
-		return false;
+		return Result;
 	}
 	
 	// Determine output directory
@@ -8056,17 +8230,34 @@ bool UBlueprintAnalyzer::ExportSingleBlueprintToJSON(const FString& BlueprintPat
 		*FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S")));
 	
 	FString FullFilePath = ExportDirectory / FileName;
+	FPaths::NormalizeFilename(FullFilePath);
+	FPaths::CollapseRelativeDirectories(FullFilePath);
 	
 	// Save to file
 	if (SaveBlueprintDataToFile(JsonData, FullFilePath))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("🎯 Single Blueprint export successful! File: %s"), *FullFilePath);
-		return true;
+		Result.bFileSaved = true;
+		Result.OutputFilePath = FullFilePath;
+		Result.bOutputIdentityCaptured = CaptureFileSha256Identity(
+			FullFilePath,
+			Result.OutputFileBytes,
+			Result.OutputFileSha256);
+		if (!Result.bOutputIdentityCaptured)
+		{
+			Result.FailureStage = TEXT("output_identity_capture");
+			UE_LOG(LogTemp, Error, TEXT("❌ Export saved but exact output identity capture failed: %s"), *FullFilePath);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("🎯 Single Blueprint export successful! File: %s"), *FullFilePath);
+		}
+		return Result;
 	}
 	else
 	{
+		Result.FailureStage = TEXT("save");
 		UE_LOG(LogTemp, Error, TEXT("❌ Failed to save file: %s"), *FullFilePath);
-		return false;
+		return Result;
 	}
 }
 

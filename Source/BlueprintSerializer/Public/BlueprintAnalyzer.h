@@ -1271,6 +1271,21 @@ struct BLUEPRINTSERIALIZER_API FBS_BlueprintData
 };
 
 /**
+ * File-level receipt returned by the identity-aware single Blueprint exporter.
+ * bFileSaved intentionally preserves the legacy bool export contract; callers
+ * that require evidence binding must also require bOutputIdentityCaptured.
+ */
+struct BLUEPRINTSERIALIZER_API FBS_BlueprintFileExportResult
+{
+	bool bFileSaved = false;
+	bool bOutputIdentityCaptured = false;
+	FString OutputFilePath;
+	int64 OutputFileBytes = 0;
+	FString OutputFileSha256;
+	FString FailureStage;
+};
+
+/**
  * Core Blueprint analysis class that extracts complete internal structure
  * Main analyzer for serializing Blueprints to structured data
  */
@@ -1307,6 +1322,21 @@ public:
 	 * Export a single Blueprint directly to JSON file (complete workflow)
 	 */
 	static bool ExportSingleBlueprintToJSON(const FString& BlueprintPath, const FString& OutputDirectory = TEXT(""));
+
+	/**
+	 * Export a single Blueprint and return the actual saved file identity.
+	 * The legacy bool method remains a compatibility wrapper around this method.
+	 */
+	static FBS_BlueprintFileExportResult ExportSingleBlueprintToJSONWithResult(
+		const FString& BlueprintPath,
+		const FString& OutputDirectory = TEXT(""));
+
+	/** Load the exact file bytes and return their lowercase SHA-256 identity. */
+	static bool CaptureFileSha256Identity(
+		const FString& FilePath,
+		int64& OutFileBytes,
+		FString& OutFileSha256,
+		TArray64<uint8>* OutExactFileBytes = nullptr);
 
 	/**
 	 * Convert Blueprint data structure to JSON object

@@ -14,6 +14,7 @@
  * Commands use the BP_SLZR.* namespace:
  * - BP_SLZR.ExportSingleBlueprint <path> - Export one Blueprint to JSON
  * - BP_SLZR.ExportMultipleBlueprints <paths...> - Export multiple Blueprints
+ * - BP_SLZR.ExportBlueprintsFromManifest <file> [output-dir] - Export an exact path-list batch
  * - BP_SLZR.AnalyzeBlueprint <path> - Analyze a Blueprint (log only)
  * - BP_SLZR.CountBlueprints - Count all Blueprints in project
  * - BP_SLZR.ExportAllBlueprints - Export all Blueprints (dangerous)
@@ -38,6 +39,7 @@ public:
     static void ExportCompleteProjectData(const TArray<FString>& Args);
     static void AnalyzeSpecificBlueprint(const TArray<FString>& Args);
     static void ExportMultipleBlueprints(const TArray<FString>& Args);
+    static void ExportBlueprintsFromManifest(const TArray<FString>& Args);
     static void CountProjectBlueprints(const TArray<FString>& Args);
     static void ValidateConverterReady(const TArray<FString>& Args);
     static void AuditAnimationCurves(const TArray<FString>& Args);
