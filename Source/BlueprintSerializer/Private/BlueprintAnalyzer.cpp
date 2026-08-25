@@ -68,14 +68,21 @@
 
 #if __has_include("ControlRigBlueprint.h")
 #include "ControlRigBlueprint.h"
+#define UEARATAME_HAS_CONTROL_RIG 1
+#elif __has_include("ControlRigBlueprintLegacy.h")
+// UE 5.8 renamed the editor asset header while retaining UControlRigBlueprint.
+#include "ControlRigBlueprintLegacy.h"
+#define UEARATAME_HAS_CONTROL_RIG 1
+#else
+#define UEARATAME_HAS_CONTROL_RIG 0
+#endif
+
+#if UEARATAME_HAS_CONTROL_RIG
 #include "RigVMModel/RigVMGraph.h"
 #include "RigVMModel/RigVMNode.h"
 #include "RigVMModel/RigVMPin.h"
 #include "RigVMModel/RigVMLink.h"
 #include "Engine/SkeletalMesh.h"
-#define UEARATAME_HAS_CONTROL_RIG 1
-#else
-#define UEARATAME_HAS_CONTROL_RIG 0
 #endif
 
 #if __has_include("Misc/EngineVersionComparison.h")
@@ -1283,6 +1290,56 @@ namespace
         }
     }
 
+    void CollectExplicitControlRigNodePaths(
+        const FBS_NodeData& Node,
+        TSet<FString>& OutPaths)
+    {
+        if (!Node.NodeType.Equals(TEXT("AnimGraphNode_ControlRig"), ESearchCase::CaseSensitive))
+        {
+            return;
+        }
+
+        TSet<FString> DiscoveredPaths;
+        if (const FString* ExplicitPath = Node.NodeProperties.Find(TEXT("meta.controlRigAssetPath")))
+        {
+            AddCandidatePath(*ExplicitPath, DiscoveredPaths);
+        }
+
+        // The reflected AnimGraphNode_ControlRig `Node` property contains the active
+        // ControlRigAssetReference. Restrict fallback scanning to semantic fields so
+        // unrelated binding, icon, material, or package paths cannot become rig targets.
+        for (const TPair<FString, FString>& Pair : Node.NodeProperties)
+        {
+            if (Pair.Key.Equals(TEXT("Node"), ESearchCase::CaseSensitive)
+                || Pair.Key.Contains(TEXT("ControlRigAssetReference"), ESearchCase::IgnoreCase))
+            {
+                CollectAssetPathsFromText(Pair.Value, DiscoveredPaths);
+            }
+        }
+
+        for (const FString& DiscoveredPath : DiscoveredPaths)
+        {
+            const FString CanonicalPath = NormalizeObjectPath(DiscoveredPath, true);
+            if (IsContentObjectPath(CanonicalPath))
+            {
+                OutPaths.Add(CanonicalPath);
+            }
+        }
+    }
+
+    void CollectExplicitControlRigNodePaths(
+        const FBS_BlueprintData& Data,
+        TSet<FString>& OutPaths)
+    {
+        for (const FBS_GraphData_Ext& Graph : Data.StructuredGraphsExt)
+        {
+            for (const FBS_NodeData& Node : Graph.Nodes)
+            {
+                CollectExplicitControlRigNodePaths(Node, OutPaths);
+            }
+        }
+    }
+
     FString FormatPropertyFlags(const EPropertyFlags Flags)
     {
         return FString::Printf(TEXT("0x%016llX"), static_cast<unsigned long long>(Flags));
@@ -1361,6 +1418,23 @@ namespace
 
         return nullptr;
     }
+
+#if UEARATAME_HAS_CONTROL_RIG
+    UControlRigBlueprint* ResolveControlRigBlueprint(UObject* Asset)
+    {
+        if (UControlRigBlueprint* RigBlueprint = Cast<UControlRigBlueprint>(Asset))
+        {
+            return RigBlueprint;
+        }
+
+        if (UClass* RigClass = Cast<UClass>(Asset))
+        {
+            return Cast<UControlRigBlueprint>(RigClass->ClassGeneratedBy);
+        }
+
+        return nullptr;
+    }
+#endif
 
     FString ResolveBlueprintVariableDefaultValue(UBlueprint* Blueprint, const FBPVariableDescription& Variable)
     {
@@ -1794,10 +1868,6 @@ namespace
             }
 
             OutClosure.Assets.Add(Candidate);
-            if (Candidate.Contains(TEXT("ControlRig")) || Candidate.Contains(TEXT("/ControlRig/")))
-            {
-                OutClosure.ControlRigs.Add(Candidate);
-            }
 
             UObject* Loaded = TryLoadBestCandidate(Candidate);
             if (!Loaded)
@@ -1995,6 +2065,15 @@ namespace
 
         for (const FBS_ControlRigData& Rig : Data.ControlRigs)
         {
+            if (const FString* RecordedRigPath = Rig.RigProperties.Find(TEXT("rigPath")))
+            {
+                const FString CanonicalRigPath = NormalizeObjectPath(*RecordedRigPath, true);
+                AddDependencyPath(CanonicalRigPath, Closure);
+                if (IsContentObjectPath(CanonicalRigPath))
+                {
+                    Closure.ControlRigs.Add(CanonicalRigPath);
+                }
+            }
             AddDependencyPath(Rig.SkeletonPath, Closure);
             AddDependencyText(Rig.RigName, Closure);
             for (const TPair<FString, FString>& Pair : Rig.RigProperties)
@@ -3170,6 +3249,7 @@ void UBlueprintAnalyzer::ExtractAnimBlueprintData(UBlueprint* Blueprint, FBS_Blu
 		AddCandidatePath(AssetRef, CandidateAssetPaths);
 	}
 	AddCandidatePath(OutData.TargetSkeletonPath, CandidateAssetPaths);
+	CollectExplicitControlRigNodePaths(OutData, CandidateAssetPaths);
 
 	auto IsLikelyAnimOrRigAssetClass = [](const FTopLevelAssetPath& ClassPath) -> bool
 	{
@@ -4243,15 +4323,7 @@ void UBlueprintAnalyzer::ExtractControlRigData(const TArray<FString>& AssetPaths
 		}
 
 		UObject* Asset = TryLoadBestCandidate(RawAssetPath);
-		UControlRigBlueprint* RigBlueprint = Cast<UControlRigBlueprint>(Asset);
-
-		if (!RigBlueprint)
-		{
-			if (UClass* RigClass = Cast<UClass>(Asset))
-			{
-				RigBlueprint = Cast<UControlRigBlueprint>(RigClass->ClassGeneratedBy);
-			}
-		}
+		UControlRigBlueprint* RigBlueprint = ResolveControlRigBlueprint(Asset);
 
 		if (RigBlueprint)
 		{
@@ -4495,7 +4567,10 @@ void UBlueprintAnalyzer::ExtractControlRigGraph(UControlRigBlueprint* RigBluepri
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 4
 		return RigBlueprint->GetModel(GraphName);
 #else
-		if (const FRigVMClient* RigVMClient = RigBlueprint->GetRigVMClient())
+		// UE 5.8's legacy ControlRig blueprint exposes GetRigVMClient through both
+		// URigVMBlueprint and IControlRigEditorAssetInterface. Select the concrete
+		// blueprint base explicitly so this remains unambiguous at compile time.
+		if (const FRigVMClient* RigVMClient = static_cast<URigVMBlueprint*>(RigBlueprint)->GetRigVMClient())
 		{
 			return RigVMClient->GetModel(GraphName.ToString());
 		}
@@ -4631,6 +4706,22 @@ FBS_NodeData UBlueprintAnalyzer::AnalyzeNodeToStruct(UEdGraphNode* Node)
     {
         Out.NodeProperties.Add(Key, Value ? TEXT("true") : TEXT("false"));
     };
+
+    if (Out.NodeType.Equals(TEXT("AnimGraphNode_ControlRig"), ESearchCase::CaseSensitive))
+    {
+        TSet<FString> ExplicitRigPaths;
+        CollectExplicitControlRigNodePaths(Out, ExplicitRigPaths);
+        TArray<FString> SortedRigPaths = ExplicitRigPaths.Array();
+        SortedRigPaths.Sort();
+        if (SortedRigPaths.Num() > 0)
+        {
+            AddMeta(TEXT("meta.controlRigAssetPath"), SortedRigPaths[0]);
+        }
+        if (SortedRigPaths.Num() > 1)
+        {
+            AddMeta(TEXT("meta.controlRigAssetPaths"), FString::Join(SortedRigPaths, TEXT(";")));
+        }
+    }
 
     if (UK2Node* K2 = Cast<UK2Node>(Node))
     {
@@ -8037,6 +8128,10 @@ TSharedPtr<FJsonObject> UBlueprintAnalyzer::BlueprintDataToJsonObject(const FBS_
 		{
 			TSharedPtr<FJsonObject> RigObj = MakeShareable(new FJsonObject);
 			RigObj->SetStringField(TEXT("rigName"), Rig.RigName);
+			const FString* RecordedRigPath = Rig.RigProperties.Find(TEXT("rigPath"));
+			RigObj->SetStringField(
+				TEXT("rigPath"),
+				RecordedRigPath ? NormalizeObjectPath(*RecordedRigPath, true) : FString());
 			RigObj->SetStringField(TEXT("skeletonPath"), Rig.SkeletonPath);
 			RigObj->SetArrayField(TEXT("controls"), BuildStringArray(Rig.ControlNames));
 			RigObj->SetArrayField(TEXT("bones"), BuildStringArray(Rig.BoneNames));
