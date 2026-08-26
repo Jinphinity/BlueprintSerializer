@@ -714,8 +714,12 @@ def main():
 
     for jf in json_files:
         try:
-            with open(jf, encoding="utf-8") as f:
-                data = json.load(f)
+            raw = jf.read_bytes()
+            if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+                text = raw.decode("utf-16")
+            else:
+                text = raw.decode("utf-8-sig")
+            data = json.loads(text)
 
             name = data.get("blueprintName", jf.stem)
             spec_md = generate_spec(data)
